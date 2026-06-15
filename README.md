@@ -25,8 +25,9 @@ npx supabase db reset
 # 5. Create admin user
 node create_admin.js
 
-# 6. Run dev server
+# 6. Run dev server (port 3001 — avoids clash with other apps on 3000)
 npm run dev
+# → http://localhost:3001
 ```
 
 ## Verify
