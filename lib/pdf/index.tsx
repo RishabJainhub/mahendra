@@ -17,7 +17,8 @@ export type BillItemPDF = {
   qty: number;
   rate: number;
   total: number;
-  barcode_data?: string;
+  /** Pre-rendered barcode as a data URI (data:image/png;base64,...). */
+  barcode_png?: string;
 };
 
 export type LayoutPDF = {
@@ -64,9 +65,7 @@ export function renderBillPDF(
         <View style={styles.row}>
           {items.map((item, idx) => (
             <View key={idx} style={[styles.label, { width: labelWidth }]}>
-              {item.barcode_data && (
-                <Image style={styles.barcode} src={`/api/bills/0/barcodes?data=${encodeURIComponent(item.barcode_data)}`} />
-              )}
+              {item.barcode_png && <Image style={styles.barcode} src={item.barcode_png} />}
               <Text style={styles.itemName}>{item.name}</Text>
               <Text style={styles.itemSku}>{item.sku}</Text>
               <Text>Qty: {item.qty} | {formatINR(item.rate)}</Text>
