@@ -32,7 +32,7 @@ export async function getSupplierDashboard() {
       .from('tally_imports')
       .select('*')
       .eq('supplier_id', user.supplier_id!)
-      .order('id', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1)
       .single();
 
@@ -46,7 +46,7 @@ export async function getSupplierDashboard() {
       .from('tally_imports')
       .select('*')
       .eq('supplier_id', user.supplier_id!)
-      .order('id', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(5);
 
     return {
