@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
+// ~15M chars (~15MB) guards against memory-exhaustion DoS via the import action.
+export const MAX_IMPORT_CONTENT_CHARS = 15_000_000;
+
 export const TallyImportInputSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileType: z.enum(['xml', 'xlsx', 'xls']),
-  fileContent: z.string().min(1),
+  fileContent: z.string().min(1).max(MAX_IMPORT_CONTENT_CHARS, 'File content too large'),
   mappingId: z.string().uuid(),
 });
 

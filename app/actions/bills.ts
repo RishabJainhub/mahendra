@@ -99,7 +99,11 @@ export async function importTallyBill(
     const parsed = TallyImportInputSchema.safeParse(input);
     if (!parsed.success) return fromZod(parsed.error);
 
-    const supplierId = input.supplierId ?? user.supplier_id;
+    // Only admins may import on behalf of another supplier. Suppliers are
+    // always pinned to their own supplier_id regardless of the input value
+    // (RLS enforces this too, but fail closed before touching the DB).
+    const supplierId =
+      user.role === 'admin' ? input.supplierId ?? user.supplier_id : user.supplier_id;
     if (!supplierId) return fail('Supplier ID required', 'VALIDATION_ERROR');
 
     let billData: { number: string; date: string; party: string; totals: { amount: number } };
