@@ -118,7 +118,10 @@ export async function updateSupplier(
     await requireAdmin();
     const supabase = await createClient();
     const { error } = await supabase.from('suppliers').update(data).eq('id', id);
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('updateSupplier failed', { reqId, id, error: error.message });
+      return fail('Update failed');
+    }
     logger.info('updateSupplier success', { reqId, id });
     revalidatePath('/admin/suppliers');
     return ok({ id });
@@ -134,7 +137,10 @@ export async function deactivateSupplier(id: string): Promise<ActionResult<{ id:
     await requireAdmin();
     const supabase = await createClient();
     const { error } = await supabase.from('suppliers').update({ active: false }).eq('id', id);
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('deactivateSupplier failed', { reqId, id, error: error.message });
+      return fail('Deactivate failed');
+    }
     await writeAudit('deactivate', 'supplier', id, {});
     logger.info('deactivateSupplier success', { reqId, id });
     revalidatePath('/admin/suppliers');
@@ -175,7 +181,10 @@ export async function upsertPricingRule(
         .eq('id', existing.id)
         .select('id')
         .single();
-      if (error) return fail(error.message);
+      if (error) {
+        logger.error('upsertPricingRule update failed', { reqId, error: error.message });
+        return fail('Pricing rule update failed');
+      }
       ruleId = data.id;
     } else {
       const { data, error } = await supabase
@@ -183,7 +192,10 @@ export async function upsertPricingRule(
         .insert({ ...parsed.data, tenant_id: admin.tenant_id })
         .select('id')
         .single();
-      if (error) return fail(error.message);
+      if (error) {
+        logger.error('upsertPricingRule insert failed', { reqId, error: error.message });
+        return fail('Pricing rule update failed');
+      }
       ruleId = data.id;
     }
 

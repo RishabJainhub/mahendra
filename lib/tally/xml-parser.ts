@@ -34,6 +34,12 @@ export function parseTallyXml(xmlText: string): TallyParseResult {
     throw new Error('Empty XML input');
   }
 
+  // Reject DTDs / custom entity declarations to prevent entity-expansion
+  // ("billion laughs") attacks from untrusted supplier uploads.
+  if (/<!DOCTYPE/i.test(xmlText) || /<!ENTITY/i.test(xmlText)) {
+    throw new Error('XML DOCTYPE/entity declarations are not allowed');
+  }
+
   const { XMLParser } = require('fast-xml-parser');
   const parser = new XMLParser({
     ignoreAttributes: false,
