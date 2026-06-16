@@ -9,6 +9,18 @@ type Props = {
   mappings: { id: string; name: string }[];
 };
 
+// Browser-safe ArrayBuffer -> base64 (Node's Buffer is not available client-side).
+// Chunked to avoid call-stack overflow on large files.
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 export function ImportForm({ suppliers, mappings }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +41,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       fileContent = await file.text();
     } else {
       const buffer = await file.arrayBuffer();
-      fileContent = Buffer.from(buffer).toString('base64');
+      fileContent = arrayBufferToBase64(buffer);
     }
 
     const result = await importTallyBill({

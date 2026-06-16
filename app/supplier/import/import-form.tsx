@@ -9,6 +9,18 @@ type Props = {
   mappings: { id: string; name: string }[];
 };
 
+// Browser-safe ArrayBuffer -> base64 (Node's Buffer is not available client-side).
+// Chunked to avoid call-stack overflow on large files.
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 export function ImportForm({ mappings }: Props) {
   const [preview, setPreview] = useState<{ sku: string; name: string; qty: number; rate: number }[] | null>(null);
   const [fileData, setFileData] = useState<{ fileName: string; fileType: 'xml' | 'xlsx' | 'xls'; fileContent: string; mappingId: string } | null>(null);
@@ -29,7 +41,7 @@ export function ImportForm({ mappings }: Props) {
       setPreview(result.items);
     } else {
       const buffer = await file.arrayBuffer();
-      fileContent = Buffer.from(buffer).toString('base64');
+      fileContent = arrayBufferToBase64(buffer);
       setPreview([{ sku: '—', name: 'Excel preview on confirm', qty: 0, rate: 0 }]);
     }
 
