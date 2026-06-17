@@ -65,19 +65,29 @@ Admin UI: **System Verify** at `/admin/verify` — runs live checks for formulas
 
 ### Sync features into your Downloads/Mahendra project folder
 
-If you run the app from `Downloads/Mahendra project` (not git-linked), pull latest on `~/mahendra` then:
+If you run the app from `Downloads/Mahendra project` (not git-linked), use the one-command updater:
 
 ```bash
 cd ~/mahendra
-git pull origin build/mahendra-phase-0-9
+chmod +x scripts/pull-and-sync.sh
+./scripts/pull-and-sync.sh "/Users/rishabpjain/Downloads/Mahendra project"
+```
+
+This stashes auto-generated git conflicts, pulls latest, syncs files, and runs `npm run check`.
+
+Manual steps if you prefer:
+
+```bash
+cd ~/mahendra
+git stash push -m "local" -- next-env.d.ts package-lock.json   # if pull is blocked
+git pull origin cursor/restore-tallybill-pro-ui-51c0
 chmod +x scripts/sync-to-local.sh
 ./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
 cd "/Users/rishabpjain/Downloads/Mahendra project"
 npm install
+npm run check
 npm run dev
 ```
-
-Or run directly from `~/mahendra` with your `.env.local` copied there.
 
 ## Docs
 
