@@ -26,9 +26,9 @@ RSYNC_EXCLUDES=(
   --exclude .env.local
 )
 
-for dir in lib app components __tests__ scripts; do
+for dir in lib app components __tests__ scripts supabase; do
   if [ -d "$SOURCE/$dir" ]; then
-    rsync -av "${RSYNC_EXCLUDES[@]}" "$SOURCE/$dir/" "$TARGET/$dir/"
+    rsync -av --delete "${RSYNC_EXCLUDES[@]}" "$SOURCE/$dir/" "$TARGET/$dir/"
   fi
 done
 
@@ -46,6 +46,7 @@ echo ""
 echo "Done. In target folder run:"
 echo "  cd \"$TARGET\""
 echo "  npm install"
+echo "  npx supabase db reset    # required after migration sync"
 echo "  npm run check"
 echo "  npm run dev"
 echo "  → http://localhost:3001"

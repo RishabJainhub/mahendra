@@ -7,7 +7,7 @@
 set -euo pipefail
 
 TARGET="${1:-/Users/rishabpjain/Downloads/Mahendra project}"
-BRANCH="${2:-cursor/restore-tallybill-pro-ui-51c0}"
+BRANCH="${2:-cursor/full-revamp-ui-features-51c0}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
 cd "$REPO"
@@ -43,5 +43,8 @@ echo "==> Running check..."
 npm run check || true
 
 echo ""
-echo "Next: cd \"$TARGET\" && npm run dev"
+echo "==> IMPORTANT: reset database (syncs migrations from GitHub, fixes schema errors)"
+echo "    cd \"$TARGET\" && npx supabase db reset"
+echo ""
+echo "Then: npm run dev"
 echo "Open: http://localhost:3001"
