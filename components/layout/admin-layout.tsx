@@ -13,6 +13,7 @@ import {
   IndianRupee,
   LayoutGrid,
   Settings,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/app/actions/auth';
@@ -27,6 +28,7 @@ const NAV = [
   { href: '/admin/pricing', label: 'Pricing', icon: IndianRupee },
   { href: '/admin/layouts', label: 'Layouts', icon: LayoutGrid },
   { href: '/admin/print', label: 'Print', icon: Printer },
+  { href: '/admin/verify', label: 'Verify', icon: ShieldCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

@@ -7,6 +7,40 @@ export type PricingRule = {
   gst_pct: number;
 };
 
+export const PRICING_MODELS: {
+  value: PricingModel;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'company151',
+    label: 'Company 151',
+    description: 'Sticker rate = Tally rate × 1.25. Margin and markup are ignored.',
+  },
+  {
+    value: 'standard',
+    label: 'Standard',
+    description: 'Apply margin % then markup % on the Tally rate, then GST.',
+  },
+];
+
+export function formatModelLabel(model: string): string {
+  return PRICING_MODELS.find((m) => m.value === model)?.label ?? model;
+}
+
+export function describeFormula(rule: PricingRule, sampleRate = 1000): string {
+  if (rule.model === 'company151') {
+    const unit = calculateCompany151Line(sampleRate);
+    return `Rate ${formatINR(sampleRate)} → sticker ${formatINR(unit)} (×1.25) + ${rule.gst_pct}% GST`;
+  }
+  const line = calculateLine({ rate: sampleRate, qty: 1 }, rule);
+  const parts = [`Base ${formatINR(sampleRate)}`];
+  if (rule.margin_pct > 0) parts.push(`+${rule.margin_pct}% margin`);
+  if (rule.markup_pct > 0) parts.push(`+${rule.markup_pct}% markup`);
+  parts.push(`= ${formatINR(line.unit_price)} + ${rule.gst_pct}% GST`);
+  return parts.join(' ');
+}
+
 export type LineInput = {
   rate: number;
   qty: number;

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/pricing';
+import { TallyImportHelp } from '@/components/tally/import-help';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 import { arrayBufferToBase64 } from '@/lib/file-utils';
 
@@ -102,6 +103,7 @@ export function ImportForm({ mappings }: Props) {
 
   return (
     <div className="max-w-2xl space-y-4">
+      <TallyImportHelp />
       {message && <p className="text-sm text-green-600">{message}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
 

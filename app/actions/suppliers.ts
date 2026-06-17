@@ -9,6 +9,7 @@ import { ok, fail, fromZod, type ActionResult } from '@/lib/result';
 import { logger, newRequestId } from '@/lib/logger';
 import { writeAudit } from '@/lib/audit';
 import { SupplierInviteInputSchema, PricingRuleInputSchema } from '@/lib/validation';
+import { describeFormula } from '@/lib/pricing';
 
 export async function getSuppliers() {
   const reqId = newRequestId();
@@ -40,7 +41,13 @@ export async function getSuppliers() {
 
 export async function inviteSupplier(
   formData: FormData
-): Promise<ActionResult<{ supplierId: string; tempPassword: string }>> {
+): Promise<
+  ActionResult<{
+    supplierId: string;
+    tempPassword: string;
+    formulaSummary: string;
+  }>
+> {
   const reqId = newRequestId();
   try {
     const admin = await requireAdmin();
@@ -48,7 +55,10 @@ export async function inviteSupplier(
       name: formData.get('name'),
       email: formData.get('email'),
       phone: formData.get('phone') || undefined,
-      pricing_rule_id: formData.get('pricing_rule_id') || undefined,
+      model: formData.get('model') ?? 'company151',
+      margin_pct: formData.get('margin_pct') ?? 0,
+      markup_pct: formData.get('markup_pct') ?? 0,
+      gst_pct: formData.get('gst_pct') ?? 5,
     });
     if (!parsed.success) return fromZod(parsed.error);
 
@@ -74,6 +84,10 @@ export async function inviteSupplier(
     const { data: supplierId, error: rpcError } = await service.rpc('provision_supplier_user', {
       email: parsed.data.email,
       p_tenant_id: admin.tenant_id,
+      p_model: parsed.data.model,
+      p_margin_pct: parsed.data.margin_pct,
+      p_markup_pct: parsed.data.markup_pct,
+      p_gst_pct: parsed.data.gst_pct,
     });
 
     if (rpcError || !supplierId) {
@@ -108,8 +122,16 @@ export async function inviteSupplier(
 
     logger.info('inviteSupplier success', { reqId, supplierId });
     revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/pricing');
 
-    return ok({ supplierId, tempPassword });
+    const formulaSummary = describeFormula({
+      model: parsed.data.model,
+      margin_pct: parsed.data.margin_pct,
+      markup_pct: parsed.data.markup_pct,
+      gst_pct: parsed.data.gst_pct,
+    });
+
+    return ok({ supplierId, tempPassword, formulaSummary });
   } catch (err) {
     logger.error('inviteSupplier error', { reqId, err });
     return fail('Invite failed');
@@ -132,6 +154,23 @@ export async function updateSupplier(
   } catch (err) {
     logger.error('updateSupplier error', { reqId, err });
     return fail('Update failed');
+  }
+}
+
+export async function activateSupplier(id: string): Promise<ActionResult<{ id: string }>> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+    const { error } = await supabase.from('suppliers').update({ active: true }).eq('id', id);
+    if (error) return fail(error.message);
+    await writeAudit('activate', 'supplier', id, {});
+    logger.info('activateSupplier success', { reqId, id });
+    revalidatePath('/admin/suppliers');
+    return ok({ id });
+  } catch (err) {
+    logger.error('activateSupplier error', { reqId, err });
+    return fail('Activate failed');
   }
 }
 
@@ -202,6 +241,7 @@ export async function upsertPricingRule(
     await writeAudit('upsert', 'pricing_rule', ruleId, parsed.data);
     logger.info('upsertPricingRule success', { reqId, ruleId });
     revalidatePath('/admin/pricing');
+    revalidatePath('/admin/suppliers');
 
     return ok({ id: ruleId });
   } catch (err) {
