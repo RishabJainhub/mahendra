@@ -19,7 +19,7 @@ npx supabase start
 # 3. Configure environment (copy keys from `supabase status`)
 cp .env.example .env.local
 
-# 4. Apply migrations and seed
+# 4. Apply migrations and seed (run from project root — uses supabase/migrations/)
 npx supabase db reset
 
 # 5. Create admin user
@@ -48,8 +48,15 @@ Common fixes:
 | Wrong folder | Use either `~/mahendra` **or** `Downloads/Mahendra project` after sync — not both at once |
 | Port in use (`EADDRINUSE`) | Stop other Next apps: `lsof -i :3001` then kill the process, or change port in `package.json` |
 
-**Use this URL in Safari/Chrome:** `http://localhost:3001`  
-Do not use Cursor cloud preview URLs (`*.cvm.dev`) for local development.
+**Migration errors?** If `db reset` fails with `tenant_id does not exist`, your Downloads folder has old migrations. Re-sync (includes `supabase/` now):
+
+```bash
+cd ~/mahendra
+git pull origin cursor/full-revamp-ui-features-51c0
+./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
+cd "/Users/rishabpjain/Downloads/Mahendra project"
+npx supabase db reset
+```
 
 ## Verify
 
