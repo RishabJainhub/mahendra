@@ -33,11 +33,30 @@ npm run dev
 ## Verify
 
 ```bash
-npm test          # 12 unit tests
+npm test          # 19 unit tests
+npm run verify    # pricing + barcodes + XML/PDF + health checks
 npm run typecheck
 npm run build
 npm run e2e       # requires dev server + Supabase
 ```
+
+Admin UI: **System Verify** at `/admin/verify` — runs live checks for formulas, parsers, and barcode PNG generation.
+
+### Sync features into your Downloads/Mahendra project folder
+
+If you run the app from `Downloads/Mahendra project` (not git-linked), pull latest on `~/mahendra` then:
+
+```bash
+cd ~/mahendra
+git pull origin build/mahendra-phase-0-9
+chmod +x scripts/sync-to-local.sh
+./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
+cd "/Users/rishabpjain/Downloads/Mahendra project"
+npm install
+npm run dev
+```
+
+Or run directly from `~/mahendra` with your `.env.local` copied there.
 
 ## Docs
 
