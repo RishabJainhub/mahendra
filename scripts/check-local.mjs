@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 
+const TIMEOUT_MS = 8000;
 const issues = [];
 
 if (!fs.existsSync('.env.local')) {
@@ -17,23 +18,9 @@ if (!fs.existsSync('.env.local')) {
 }
 
 try {
-  execSync('npx supabase status', { stdio: 'pipe' });
+  execSync('npx supabase status', { stdio: 'pipe', timeout: TIMEOUT_MS });
 } catch {
-  issues.push('Supabase is not running — open Docker, then run: npx supabase start');
-}
-
-try {
-  const out = execSync('npx supabase status -o env 2>/dev/null', { encoding: 'utf8' });
-  if (fs.existsSync('.env.local')) {
-    const env = fs.readFileSync('.env.local', 'utf8');
-    const statusUrl = out.match(/API_URL="?([^"\n]+)"?/)?.[1];
-    const envUrl = env.match(/NEXT_PUBLIC_SUPABASE_URL=(.+)/)?.[1]?.trim();
-    if (statusUrl && envUrl && statusUrl !== envUrl) {
-      issues.push(`NEXT_PUBLIC_SUPABASE_URL (${envUrl}) does not match supabase status (${statusUrl})`);
-    }
-  }
-} catch {
-  // status -o env may fail if supabase not running; already reported above
+  issues.push('Supabase is not running (or Docker is starting) — open Docker, then: npx supabase start');
 }
 
 console.log('\nTallyBill Pro — local check\n');

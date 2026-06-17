@@ -24,7 +24,10 @@ export const SupplierInviteInputSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   phone: z.string().optional(),
-  pricing_rule_id: z.string().uuid().optional(),
+  model: z.enum(['standard', 'company151']).default('company151'),
+  margin_pct: z.coerce.number().min(0).max(100).default(0),
+  markup_pct: z.coerce.number().min(0).max(100).default(0),
+  gst_pct: z.coerce.number().min(0).max(100).default(5),
 });
 
 export const PricingRuleInputSchema = z.object({

@@ -2,6 +2,8 @@ import {
   calculateLine,
   calculateCompany151Line,
   formatINR,
+  describeFormula,
+  formatModelLabel,
   type PricingRule,
 } from '@/lib/pricing';
 
@@ -60,5 +62,16 @@ describe('pricing', () => {
     expect(result.unit_price).toBeCloseTo(100);
     expect(result.taxable).toBeCloseTo(300);
     expect(formatINR(1234.5)).toMatch(/1,234\.50/);
+  });
+
+  it('describeFormula for company151', () => {
+    expect(
+      describeFormula({ model: 'company151', margin_pct: 0, markup_pct: 0, gst_pct: 5 })
+    ).toContain('×1.25');
+  });
+
+  it('formatModelLabel', () => {
+    expect(formatModelLabel('company151')).toBe('Company 151');
+    expect(formatModelLabel('standard')).toBe('Standard');
   });
 });

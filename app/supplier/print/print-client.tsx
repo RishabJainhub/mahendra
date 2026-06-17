@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { getBillStickers, markBillPrinted } from '@/app/actions/bills';
@@ -15,15 +15,20 @@ const PDFViewer = dynamic(
 type Props = {
   bills: { id: string; bill_number: string; bill_date: string; status?: string }[];
   layout: { grid_cols: number; label_w: number; label_h: number; include_fields: string[] } | null;
+  initialBillId?: string;
 };
 
-export function PrintPageClient({ bills, layout }: Props) {
+export function PrintPageClient({ bills, layout, initialBillId }: Props) {
   const router = useRouter();
-  const [billId, setBillId] = useState('');
+  const [billId, setBillId] = useState(initialBillId ?? '');
   const [pdfDoc, setPdfDoc] = useState<React.ReactElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialBillId) setBillId(initialBillId);
+  }, [initialBillId]);
 
   async function handlePreview() {
     if (!billId) return;
