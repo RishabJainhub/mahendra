@@ -1,7 +1,11 @@
 import { LoginForm } from './login-form';
+import { SetupBanner } from './setup-banner';
 import { APP_NAME, APP_TAGLINE } from '@/lib/brand';
+import { isSupabaseConfigured } from '@/lib/env';
 
 export default function LoginPage() {
+  const configured = isSupabaseConfigured();
+
   return (
     <div className="flex min-h-screen">
       <div className="hidden w-1/2 flex-col justify-between bg-sidebar p-12 text-white lg:flex">
@@ -14,8 +18,9 @@ export default function LoginPage() {
           <p>Supports PDF, XML, and Excel exports from TallyPrime.</p>
         </div>
       </div>
-      <div className="flex flex-1 items-center justify-center p-6">
-        <LoginForm />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+        {!configured && <SetupBanner />}
+        <LoginForm disabled={!configured} />
       </div>
     </div>
   );

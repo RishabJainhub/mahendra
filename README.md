@@ -30,6 +30,27 @@ npm run dev
 # → http://localhost:3001
 ```
 
+## Localhost not working?
+
+Run the diagnostic first:
+
+```bash
+npm run check
+```
+
+Common fixes:
+
+| Problem | Fix |
+|---------|-----|
+| Blank page / 500 error | Create `.env.local` with keys from `npx supabase status` |
+| `Connection refused` | Run `npm run dev` — app uses **port 3001**, not 3000 |
+| Supabase errors | Start **Docker Desktop**, then `npx supabase start` |
+| Wrong folder | Use either `~/mahendra` **or** `Downloads/Mahendra project` after sync — not both at once |
+| Port in use (`EADDRINUSE`) | Stop other Next apps: `lsof -i :3001` then kill the process, or change port in `package.json` |
+
+**Use this URL in Safari/Chrome:** `http://localhost:3001`  
+Do not use Cursor cloud preview URLs (`*.cvm.dev`) for local development.
+
 ## Verify
 
 ```bash

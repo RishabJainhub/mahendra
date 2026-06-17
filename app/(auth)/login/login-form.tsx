@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { APP_NAME } from '@/lib/brand';
 
-export function LoginForm() {
+export function LoginForm({ disabled = false }: { disabled?: boolean }) {
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(formData: FormData) {
@@ -31,7 +31,7 @@ export function LoginForm() {
             <label htmlFor="email" className="mb-1 block text-sm font-medium">
               Email
             </label>
-            <Input id="email" name="email" type="email" required autoComplete="email" />
+            <Input id="email" name="email" type="email" required autoComplete="email" disabled={disabled} />
           </div>
           <div>
             <label htmlFor="password" className="mb-1 block text-sm font-medium">
@@ -43,9 +43,10 @@ export function LoginForm() {
               type="password"
               required
               autoComplete="current-password"
+              disabled={disabled}
             />
           </div>
-          <Button type="submit" className="w-full">
+          <Button type="submit" className="w-full" disabled={disabled}>
             Sign In
           </Button>
         </form>
