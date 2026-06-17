@@ -5,6 +5,9 @@ ALTER TABLE public.bill_items
   ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES public.tenants (id) ON DELETE CASCADE;
 
 ALTER TABLE public.tally_imports
+  ALTER COLUMN status DROP DEFAULT;
+
+ALTER TABLE public.tally_imports
   ALTER COLUMN status TYPE public.import_status
   USING (
     CASE status
@@ -17,7 +20,7 @@ ALTER TABLE public.tally_imports
   );
 
 ALTER TABLE public.tally_imports
-  ALTER COLUMN status SET DEFAULT 'pending';
+  ALTER COLUMN status SET DEFAULT 'pending'::public.import_status;
 
 ALTER TABLE public.suppliers
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
