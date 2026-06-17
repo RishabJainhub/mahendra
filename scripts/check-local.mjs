@@ -35,7 +35,7 @@ if (fs.existsSync('supabase/migrations')) {
   }
 }
 
-console.log('\nTallyBill Pro — local check\n');
+console.log('\nMahendra Distributors — local check\n');
 console.log('App URL: http://localhost:3001  (not 3000, not a Cursor cloud tab)\n');
 
 if (issues.length === 0) {

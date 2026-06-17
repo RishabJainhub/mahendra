@@ -27,7 +27,7 @@ function ask(question) {
 }
 
 async function main() {
-  console.log('Create Admin User for Mahendra Saree House\n');
+  console.log('Create Admin User for Mahendra Distributors\n');
 
   const email = await ask('Email: ');
   const password = await ask('Password: ');

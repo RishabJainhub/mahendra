@@ -1,6 +1,6 @@
-# TallyBill Pro
+# Mahendra Distributors
 
-Multi-tenant Tally bill processing and barcode sticker printing for saree suppliers.
+Multi-tenant Tally bill processing and barcode sticker printing for distributors.
 
 ## Stack
 

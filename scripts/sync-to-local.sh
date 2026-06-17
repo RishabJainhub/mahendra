@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync latest from GitHub clone into your local TallyBill Pro folder (Downloads).
+# Sync latest from GitHub clone into your local Mahendra Distributors folder (Downloads).
 # Usage: ./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
 
 set -euo pipefail
