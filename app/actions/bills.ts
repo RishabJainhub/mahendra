@@ -11,6 +11,8 @@ import { parseTallyXml } from '@/lib/tally/xml-parser';
 import { parseTallyXlsx } from '@/lib/tally/excel-parser';
 import { parseTallyPdf } from '@/lib/tally/pdf-parser';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
+import { generateBarcodePng } from '@/lib/barcode';
+import { APP_NAME } from '@/lib/brand';
 
 export type BillFilters = {
   status?: string;
@@ -82,6 +84,92 @@ export async function getBill(id: string) {
     return { ...bill, audit: audit ?? [] };
   } catch (err) {
     logger.error('getBill error', { reqId, err });
+    return null;
+  }
+}
+
+export type StickerBill = {
+  bill_number: string;
+  bill_date: string;
+  supplier_name: string;
+  tenant_name: string;
+  tenant_gstin?: string;
+  total_amount: number;
+};
+
+export type StickerItem = {
+  sku: string;
+  name: string;
+  qty: number;
+  rate: number;
+  total: number;
+  barcode_png?: string;
+};
+
+export async function getBillStickers(
+  id: string
+): Promise<{ bill: StickerBill; items: StickerItem[] } | null> {
+  const reqId = newRequestId();
+  try {
+    await requireUser();
+    const supabase = await createClient();
+
+    const { data: bill, error } = await supabase
+      .from('bills')
+      .select(
+        '*, supplier:suppliers(name), tenant:tenants(name, gstin), bill_items(*, item:items(sku, name))'
+      )
+      .eq('id', id)
+      .single();
+
+    if (error || !bill) {
+      logger.warn('getBillStickers not found', { reqId, id });
+      return null;
+    }
+
+    const rawItems = (bill.bill_items ?? []) as {
+      sku: string;
+      name: string;
+      qty: number;
+      rate: number;
+      total: number;
+    }[];
+
+    const items: StickerItem[] = await Promise.all(
+      rawItems.map(async (item) => {
+        let barcode_png: string | undefined;
+        if (item.sku) {
+          try {
+            const png = await generateBarcodePng({ data: item.sku });
+            barcode_png = `data:image/png;base64,${png.toString('base64')}`;
+          } catch (err) {
+            logger.error('getBillStickers barcode failed', { reqId, sku: item.sku, err });
+          }
+        }
+        return {
+          sku: item.sku,
+          name: item.name,
+          qty: Number(item.qty),
+          rate: Number(item.rate),
+          total: Number(item.total),
+          barcode_png,
+        };
+      })
+    );
+
+    return {
+      bill: {
+        bill_number: bill.bill_number,
+        bill_date: bill.bill_date,
+        supplier_name: (bill.supplier as { name: string } | null)?.name ?? '',
+        tenant_name: (bill.tenant as { name: string } | null)?.name ?? APP_NAME,
+        tenant_gstin: (bill.tenant as { gstin?: string } | null)?.gstin ?? undefined,
+        total_amount: Number(bill.total_amount),
+      },
+      items,
+    };
+  } catch (err) {
+    logger.error('getBillStickers error', { reqId, err });
     return null;
   }
 }

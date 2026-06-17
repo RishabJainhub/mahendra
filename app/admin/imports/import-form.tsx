@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/pricing';
-import { TallyImportHelp } from '@/components/tally/import-help';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
+import { arrayBufferToBase64 } from '@/lib/file-utils';
 
 type FileType = 'xml' | 'xlsx' | 'xls' | 'pdf';
 
@@ -58,7 +58,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       if (fileType === 'xml') {
         fileContent = await file.text();
       } else {
-        fileContent = Buffer.from(await file.arrayBuffer()).toString('base64');
+        fileContent = arrayBufferToBase64(await file.arrayBuffer());
       }
 
       const result = await previewTallyBill({
@@ -101,7 +101,6 @@ export function ImportForm({ suppliers, mappings }: Props) {
 
   return (
     <div className="max-w-2xl space-y-4">
-      <TallyImportHelp />
       {message && <p className="text-sm text-green-600">{message}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -123,7 +122,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium">Column Mapping (Excel only)</label>
+        <label className="mb-1 block text-sm font-medium">Column Mapping</label>
         <select
           value={mappingId}
           onChange={(e) => setMappingId(e.target.value)}
@@ -138,7 +137,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium">Tally bill file</label>
+        <label className="mb-1 block text-sm font-medium">Tally File</label>
         <input
           type="file"
           accept=".xml,.xlsx,.xls,.pdf,application/pdf"
@@ -151,14 +150,37 @@ export function ImportForm({ suppliers, mappings }: Props) {
 
       {preview && billMeta && (
         <div>
-          <div className="mb-3 rounded border bg-muted/30 p-3 text-sm">
+          <div className="mb-3 rounded-md border bg-muted/30 p-3 text-sm">
             <div>Bill #: {billMeta.number}</div>
             <div>Date: {billMeta.date}</div>
             <div>Party: {billMeta.party}</div>
             <div>Total: {formatINR(billMeta.total)}</div>
           </div>
-          <Button onClick={handleConfirm} disabled={loading}>
-            Confirm Import ({preview.length} items)
+          <h3 className="mb-2 font-medium">Preview ({preview.length} items)</h3>
+          <div className="max-h-64 overflow-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-3 py-2 text-left">SKU</th>
+                  <th className="px-3 py-2 text-left">Name</th>
+                  <th className="px-3 py-2 text-right">Qty</th>
+                  <th className="px-3 py-2 text-right">Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.map((item, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="px-3 py-2">{item.sku}</td>
+                    <td className="px-3 py-2">{item.name}</td>
+                    <td className="px-3 py-2 text-right">{item.qty}</td>
+                    <td className="px-3 py-2 text-right">{formatINR(item.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Button onClick={handleConfirm} disabled={loading} className="mt-3">
+            Confirm Import
           </Button>
         </div>
       )}

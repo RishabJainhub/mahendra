@@ -12,7 +12,7 @@ export default async function SupplierDashboardPage() {
   const kpis = [
     { label: 'Total Bills', value: String(totalBills) },
     { label: 'Stickers Printed', value: String(printedBills) },
-    { label: 'Last Import', value: lastImport ? new Date(lastImport.id).toLocaleDateString('en-IN') : '—' },
+    { label: 'Last Import', value: lastImport?.created_at ? new Date(lastImport.created_at).toLocaleDateString('en-IN') : '—' },
     { label: 'Pricing Model', value: pricingRule?.model ?? 'standard' },
   ];
 
