@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync latest features from this repo into your local TallyBillPro folder.
+# Sync latest features from GitHub clone into your local TallyBillPro folder (Downloads).
 # Usage: ./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
 
 set -euo pipefail
@@ -19,27 +19,27 @@ fi
 
 echo "Syncing from $SOURCE -> $TARGET"
 
-EX=(--exclude node_modules --exclude .next --exclude .git --exclude .env.local)
+RSYNC_EXCLUDES=(
+  --exclude node_modules
+  --exclude .next
+  --exclude .git
+  --exclude .env.local
+)
 
-for dir in lib app components __tests__ scripts; do
-  if [ -d "$SOURCE/$dir" ]; then
-    rsync -av "${EX[@]}" "$SOURCE/$dir/" "$TARGET/$dir/"
-  fi
-done
+rsync -av "${RSYNC_EXCLUDES[@]}" \
+  "$SOURCE/lib/" "$TARGET/lib/"
+rsync -av "${RSYNC_EXCLUDES[@]}" \
+  "$SOURCE/app/" "$TARGET/app/"
+rsync -av "${RSYNC_EXCLUDES[@]}" \
+  "$SOURCE/components/" "$TARGET/components/"
+rsync -av "${RSYNC_EXCLUDES[@]}" \
+  "$SOURCE/__tests__/" "$TARGET/__tests__/"
 
-for f in package.json package-lock.json next.config.ts tsconfig.json jest.config.js; do
-  [ -f "$SOURCE/$f" ] && cp "$SOURCE/$f" "$TARGET/$f"
-done
+cp "$SOURCE/package.json" "$TARGET/package.json"
+cp "$SOURCE/package-lock.json" "$TARGET/package-lock.json" 2>/dev/null || true
+cp "$SOURCE/next.config.ts" "$TARGET/next.config.ts"
 
-echo ""
-echo "✓ Sync complete. PDF import files included:"
-echo "  - lib/tally/pdf-parser.ts"
-echo "  - components/tally/import-format-picker.tsx"
-echo "  - app/supplier/import/import-form.tsx"
-echo ""
-echo "Next steps:"
+echo "Done. In target folder run:"
 echo "  cd \"$TARGET\""
 echo "  npm install"
-echo "  lsof -ti :3001 | xargs kill -9 2>/dev/null || true"
 echo "  npm run dev"
-echo "  open http://localhost:3001/supplier/import"
