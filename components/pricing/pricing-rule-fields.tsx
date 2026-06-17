@@ -43,10 +43,10 @@ export function PricingRuleFields({ prefix, defaultValues, showPreview = true }:
   const modelMeta = PRICING_MODELS.find((m) => m.value === model);
 
   return (
-    <div className="space-y-3 rounded-lg border bg-muted/10 p-4">
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-slate-950">
       <div>
-        <p className="text-sm font-medium">Pricing formula</p>
-        <p className="text-xs text-muted-foreground">Applied automatically when this supplier imports a Tally bill.</p>
+        <p className="text-sm font-semibold text-slate-950">Pricing formula</p>
+        <p className="text-xs text-slate-600">Applied automatically when this supplier imports a Tally bill.</p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -64,7 +64,7 @@ export function PricingRuleFields({ prefix, defaultValues, showPreview = true }:
               </option>
             ))}
           </SelectField>
-          {modelMeta && <p className="mt-1 text-xs text-muted-foreground">{modelMeta.description}</p>}
+          {modelMeta && <p className="mt-1 text-xs text-slate-600">{modelMeta.description}</p>}
         </div>
 
         <div>
@@ -111,7 +111,7 @@ export function PricingRuleFields({ prefix, defaultValues, showPreview = true }:
       </div>
 
       {showPreview && (
-        <div className="rounded-md bg-primary/5 px-3 py-2 text-xs text-primary">
+        <div className="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
           <span className="font-medium">Preview: </span>
           {preview}
         </div>
