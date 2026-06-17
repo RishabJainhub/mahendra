@@ -5,8 +5,10 @@ import { PrintPageClient } from './print-client';
 
 export default async function SupplierPrintPage() {
   await requireSupplier();
-  const { bills } = await getBills({ status: 'imported' });
+  const { bills } = await getBills({ pageSize: 100 });
+  const printable = (bills as { id: string; bill_number: string; bill_date: string; status: string }[])
+    .filter((b) => b.status === 'imported' || b.status === 'printed');
   const layout = await getDefaultLayout();
 
-  return <PrintPageClient bills={bills} layout={layout} />;
+  return <PrintPageClient bills={printable} layout={layout} />;
 }

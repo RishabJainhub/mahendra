@@ -1,4 +1,4 @@
-# Mahendra Saree House
+# TallyBill Pro
 
 Multi-tenant Tally bill processing and barcode sticker printing for saree suppliers.
 
