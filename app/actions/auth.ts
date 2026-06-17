@@ -8,6 +8,52 @@ import { ok, fail, type ActionResult } from '@/lib/result';
 import { logger, newRequestId } from '@/lib/logger';
 import { ResetPasswordSchema, parseFormData } from '@/lib/validation';
 
+async function resolveLoginRole(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  appMeta: Record<string, unknown>
+): Promise<{ role: 'admin' | 'supplier'; tenantId: string } | null> {
+  let role = appMeta.role as 'admin' | 'supplier' | undefined;
+  let tenantId = appMeta.tenant_id as string | undefined;
+
+  if (role && tenantId) {
+    return { role, tenantId };
+  }
+
+  const service = createServiceClient();
+  const { data: profile } = await service
+    .from('users')
+    .select('role, tenant_id, supplier_id, must_reset_password')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!profile?.role || !profile.tenant_id) {
+    return null;
+  }
+
+  await service.rpc('sync_user_app_metadata', {
+    p_user_id: userId,
+    p_tenant_id: profile.tenant_id,
+    p_role: profile.role,
+    p_supplier_id: profile.supplier_id,
+    p_must_reset_password: profile.must_reset_password ?? false,
+  });
+
+  await supabase.auth.refreshSession();
+  const {
+    data: { user: refreshed },
+  } = await supabase.auth.getUser();
+
+  role = refreshed?.app_metadata?.role as 'admin' | 'supplier' | undefined;
+  tenantId = refreshed?.app_metadata?.tenant_id as string | undefined;
+
+  if (role && tenantId) {
+    return { role, tenantId };
+  }
+
+  return { role: profile.role as 'admin' | 'supplier', tenantId: profile.tenant_id };
+}
+
 export async function signIn(formData: FormData): Promise<ActionResult<never>> {
   const reqId = newRequestId();
   try {
@@ -22,13 +68,32 @@ export async function signIn(formData: FormData): Promise<ActionResult<never>> {
       return fail(error.message, 'AUTH_ERROR');
     }
 
-    const role = data.user?.app_metadata?.role as string | undefined;
+    const user = data.user;
+    if (!user) {
+      return fail('Sign in failed', 'AUTH_ERROR');
+    }
+
+    const resolved = await resolveLoginRole(supabase, user.id, user.app_metadata ?? {});
+    if (!resolved) {
+      await supabase.auth.signOut();
+      logger.warn('signIn missing profile', { reqId, userId: user.id });
+      return fail(
+        'No login profile found for this account. After a database reset, create an admin: node create_admin.js',
+        'ACCOUNT_NOT_PROVISIONED'
+      );
+    }
+
+    const { role } = resolved;
+    if (role !== 'admin' && role !== 'supplier') {
+      await supabase.auth.signOut();
+      return fail('Invalid account role. Contact an administrator.', 'INVALID_ROLE');
+    }
+
     logger.info('signIn success', { reqId, role });
     revalidatePath('/', 'layout');
 
     if (role === 'admin') redirect('/admin');
-    if (role === 'supplier') redirect('/supplier');
-    redirect('/login');
+    redirect('/supplier');
   } catch (err) {
     if (err && typeof err === 'object' && 'digest' in err) throw err;
     logger.error('signIn error', { reqId, err });

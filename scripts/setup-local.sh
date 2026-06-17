@@ -36,10 +36,20 @@ echo ""
 echo "==> 3/4 Resetting database (applies all migrations + seed tenant)..."
 npx supabase db reset
 
+if [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
+  echo ""
+  echo "==> Creating admin user from ADMIN_EMAIL / ADMIN_PASSWORD..."
+  node create_admin.js --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD"
+fi
+
 echo ""
 echo "==> 4/4 Setup complete."
 echo ""
-echo "Create your admin login, then start the app:"
+echo "Create your admin login (required after every db reset), then start the app:"
 echo "  node create_admin.js"
+echo "  npm run diagnose-login   # optional: verify login is ready"
 echo "  npm run dev"
 echo "  → open http://localhost:3001"
+echo ""
+echo "Optional non-interactive admin:"
+echo "  ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=secret ./scripts/setup-local.sh"
