@@ -36,8 +36,26 @@ export function LayoutClient({ layouts }: { layouts: Layout[] }) {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setEditing(layout)}>Edit</Button>
-              <Button size="sm" variant="destructive" onClick={async () => { await deleteLayout(layout.id); }}>Delete</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                aria-label={`Edit ${layout.name}`}
+                onClick={() => setEditing(layout)}
+              >
+                Edit
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                className="cursor-pointer"
+                aria-label={`Delete ${layout.name}`}
+                onClick={async () => { await deleteLayout(layout.id); }}
+              >
+                Delete
+              </Button>
             </div>
           </div>
         ))}
