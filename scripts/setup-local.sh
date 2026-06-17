@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot local setup for TallyBill Pro. Run from the repo root.
+# One-shot local setup for Mahendra Distributors. Run from the repo root.
 #   ./scripts/setup-local.sh
 #
 # Requires Docker Desktop running. Creates .env.local, applies migrations,

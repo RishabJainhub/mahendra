@@ -2,7 +2,7 @@
 INSERT INTO public.tenants (id, name, gstin, address)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  'Mahendra Saree House',
+  'Mahendra Distributors',
   NULL,
   NULL
 )
