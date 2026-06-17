@@ -39,7 +39,10 @@ console.log('\nMahendra Distributors — local check\n');
 console.log('App URL: http://localhost:3001  (not 3000, not a Cursor cloud tab)\n');
 
 if (issues.length === 0) {
-  console.log('✓ Setup looks good. Run: npm run dev\n');
+  console.log('✓ Setup looks good.');
+  console.log('After db reset, create admin: node create_admin.js');
+  console.log('Verify login: npm run diagnose-login');
+  console.log('Run: npm run dev\n');
   process.exit(0);
 }
 

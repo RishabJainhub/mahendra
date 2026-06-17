@@ -9,21 +9,18 @@ export function SetupBanner() {
       <ol className="mt-3 list-decimal space-y-1 pl-5 text-amber-900">
         <li>Start Docker Desktop</li>
         <li>
-          <code className="rounded bg-white px-1">npx supabase start</code>
+          Run <code className="rounded bg-white px-1">./scripts/setup-local.sh</code> (starts Supabase, writes{' '}
+          <code className="rounded bg-white px-1">.env.local</code>, applies migrations)
         </li>
         <li>
-          <code className="rounded bg-white px-1">cp .env.example .env.local</code>
-        </li>
-        <li>
-          Copy keys from <code className="rounded bg-white px-1">npx supabase status</code> into{' '}
-          <code className="rounded bg-white px-1">.env.local</code>
+          Create admin: <code className="rounded bg-white px-1">node create_admin.js</code>
         </li>
         <li>
           Restart the dev server: <code className="rounded bg-white px-1">npm run dev</code>
         </li>
       </ol>
       <p className="mt-3 text-xs text-amber-800">
-        Run <code className="rounded bg-white px-1">npm run check</code> to diagnose issues.
+        Run <code className="rounded bg-white px-1">npm run diagnose-login</code> to check auth setup.
       </p>
     </div>
   );
