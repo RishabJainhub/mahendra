@@ -9,6 +9,8 @@ import { writeAudit } from '@/lib/audit';
 import { TallyImportInputSchema } from '@/lib/validation';
 import { parseTallyXml } from '@/lib/tally/xml-parser';
 import { parseTallyXlsx } from '@/lib/tally/excel-parser';
+import { parseTallyPdf } from '@/lib/tally/pdf-parser';
+import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 
 export type BillFilters = {
   status?: string;
@@ -84,12 +86,74 @@ export async function getBill(id: string) {
   }
 }
 
+export async function previewTallyBill(input: {
+  fileName: string;
+  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileContent: string;
+  mappingId?: string;
+}): Promise<
+  ActionResult<{
+    bill: { number: string; date: string; party: string; total: number };
+    items: { sku: string; name: string; qty: number; rate: number }[];
+  }>
+> {
+  const reqId = newRequestId();
+  try {
+    await requireUser();
+    const parsed = TallyImportInputSchema.safeParse(input);
+    if (!parsed.success) return fromZod(parsed.error);
+
+    const result = await parseTallyImport(parsed.data);
+    return ok({
+      bill: {
+        number: result.bill.number,
+        date: result.bill.date,
+        party: result.bill.party,
+        total: result.bill.totals.amount,
+      },
+      items: result.items.map((i) => ({
+        sku: i.sku,
+        name: i.name,
+        qty: i.qty,
+        rate: i.rate,
+      })),
+    });
+  } catch (err) {
+    logger.error('previewTallyBill error', { reqId, err });
+    return fail(err instanceof Error ? err.message : 'Could not read this file');
+  }
+}
+
+async function parseTallyImport(parsed: {
+  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileContent: string;
+  mappingId?: string;
+}) {
+  if (parsed.fileType === 'xml') {
+    return parseTallyXml(parsed.fileContent);
+  }
+  if (parsed.fileType === 'pdf') {
+    const buffer = Buffer.from(parsed.fileContent, 'base64');
+    return parseTallyPdf(buffer);
+  }
+  const supabase = await createClient();
+  const mappingId = parsed.mappingId ?? DEFAULT_TALLY_MAPPING_ID;
+  const { data: mapping } = await supabase
+    .from('tally_column_mappings')
+    .select('column_map')
+    .eq('id', mappingId)
+    .single();
+  if (!mapping) throw new Error('Column mapping not found');
+  const buffer = Buffer.from(parsed.fileContent, 'base64');
+  return parseTallyXlsx(buffer, mapping.column_map as Record<string, string>);
+}
+
 export async function importTallyBill(
   input: {
     fileName: string;
-    fileType: 'xml' | 'xlsx' | 'xls';
+    fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
     fileContent: string;
-    mappingId: string;
+    mappingId?: string;
     supplierId?: string;
   }
 ): Promise<ActionResult<{ billId: string; itemCount: number }>> {
@@ -105,23 +169,15 @@ export async function importTallyBill(
     let billData: { number: string; date: string; party: string; totals: { amount: number } };
     let items: { sku: string; name: string; qty: number; rate: number; hsn?: string }[];
 
-    if (parsed.data.fileType === 'xml') {
-      const result = parseTallyXml(parsed.data.fileContent);
-      billData = result.bill;
-      items = result.items;
-    } else {
-      const supabase = await createClient();
-      const { data: mapping } = await supabase
-        .from('tally_column_mappings')
-        .select('column_map')
-        .eq('id', parsed.data.mappingId)
-        .single();
-      if (!mapping) return fail('Mapping not found');
-      const buffer = Buffer.from(parsed.data.fileContent, 'base64');
-      const result = parseTallyXlsx(buffer, mapping.column_map as Record<string, string>);
-      billData = result.bill;
-      items = result.items;
-    }
+    const parsedBill = await parseTallyImport({
+      fileType: parsed.data.fileType,
+      fileContent: parsed.data.fileContent,
+      mappingId: parsed.data.mappingId,
+    });
+    billData = parsedBill.bill;
+    items = parsedBill.items;
+
+    const mappingId = parsed.data.mappingId ?? DEFAULT_TALLY_MAPPING_ID;
 
     const supabase = await createClient();
 
@@ -160,7 +216,7 @@ export async function importTallyBill(
       supplier_id: supplierId,
       file_name: parsed.data.fileName,
       file_type: parsed.data.fileType,
-      mapping_id: parsed.data.mappingId,
+      mapping_id: mappingId,
       status: 'completed',
     });
 

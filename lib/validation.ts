@@ -1,11 +1,18 @@
 import { z } from 'zod';
 
-export const TallyImportInputSchema = z.object({
-  fileName: z.string().min(1).max(255),
-  fileType: z.enum(['xml', 'xlsx', 'xls']),
-  fileContent: z.string().min(1),
-  mappingId: z.string().uuid(),
-});
+export const MAX_IMPORT_CONTENT_CHARS = 15_000_000;
+
+export const TallyImportInputSchema = z
+  .object({
+    fileName: z.string().min(1).max(255),
+    fileType: z.enum(['xml', 'xlsx', 'xls', 'pdf']),
+    fileContent: z.string().min(1).max(MAX_IMPORT_CONTENT_CHARS, 'File content too large'),
+    mappingId: z.string().uuid().optional(),
+  })
+  .refine((d) => d.fileType === 'pdf' || d.fileType === 'xml' || d.mappingId, {
+    message: 'Column mapping is required for Excel imports',
+    path: ['mappingId'],
+  });
 
 export const BillItemInputSchema = z.object({
   item_id: z.string().uuid(),
