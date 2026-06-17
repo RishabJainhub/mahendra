@@ -48,14 +48,24 @@ Common fixes:
 | Wrong folder | Use either `~/mahendra` **or** `Downloads/Mahendra project` after sync — not both at once |
 | Port in use (`EADDRINUSE`) | Stop other Next apps: `lsof -i :3001` then kill the process, or change port in `package.json` |
 
-**Migration errors?** If `db reset` fails with `tenant_id does not exist`, your Downloads folder has old migrations. Re-sync (includes `supabase/` now):
+**Migration errors?** If `db reset` fails with `tenant_id does not exist` / `idx_audit_log_tenant`, your Downloads folder has **old** migrations. Fix:
 
 ```bash
 cd ~/mahendra
 git pull origin cursor/full-revamp-ui-features-51c0
-./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
+chmod +x scripts/fix-db-migrations.sh
+./scripts/fix-db-migrations.sh "/Users/rishabpjain/Downloads/Mahendra project"
 cd "/Users/rishabpjain/Downloads/Mahendra project"
 npx supabase db reset
+```
+
+Or reset directly from the git clone (simplest):
+
+```bash
+cd ~/mahendra
+git pull origin cursor/full-revamp-ui-features-51c0
+npx supabase db reset
+npm run dev
 ```
 
 ## Verify

@@ -23,6 +23,18 @@ try {
   issues.push('Supabase is not running (or Docker is starting) — open Docker, then: npx supabase start');
 }
 
+if (fs.existsSync('supabase/migrations')) {
+  const sql = fs.readdirSync('supabase/migrations')
+    .filter((f) => f.endsWith('.sql'))
+    .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
+    .join('\n');
+  if (sql.includes('idx_audit_log_tenant')) {
+    issues.push(
+      'Stale Supabase migrations detected (idx_audit_log_tenant) — run: ./scripts/fix-db-migrations.sh .'
+    );
+  }
+}
+
 console.log('\nTallyBill Pro — local check\n');
 console.log('App URL: http://localhost:3001  (not 3000, not a Cursor cloud tab)\n');
 
