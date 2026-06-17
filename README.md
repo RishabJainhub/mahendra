@@ -9,6 +9,18 @@ Multi-tenant Tally bill processing and barcode sticker printing for saree suppli
 
 ## Quick start
 
+**Fastest path — one script does everything** (needs Docker Desktop running):
+
+```bash
+npm install
+chmod +x scripts/setup-local.sh
+./scripts/setup-local.sh    # starts Supabase, writes .env.local, applies migrations
+node create_admin.js        # create your login
+npm run dev                 # → http://localhost:3001
+```
+
+Manual steps:
+
 ```bash
 # 1. Install dependencies
 npm install
