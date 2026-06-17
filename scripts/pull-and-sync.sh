@@ -28,10 +28,13 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
 git pull origin "$BRANCH"
 
-chmod +x scripts/sync-to-local.sh scripts/check-local.mjs 2>/dev/null || true
+chmod +x scripts/sync-to-local.sh scripts/check-local.mjs scripts/fix-db-migrations.sh 2>/dev/null || true
 
 echo "==> Syncing to Downloads..."
 "$REPO/scripts/sync-to-local.sh" "$TARGET"
+
+echo "==> Fixing database migrations (removes stale local SQL)..."
+"$REPO/scripts/fix-db-migrations.sh" "$TARGET"
 
 echo ""
 echo "==> Installing in target..."
