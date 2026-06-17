@@ -50,8 +50,17 @@ export function ItemsClient({ items }: { items: Item[] }) {
                 <td className="px-4 py-3 text-right">{formatINR(Number(item.base_rate))}</td>
                 <td className="px-4 py-3 text-right">{formatINR(Number(item.mrp))}</td>
                 <td className="px-4 py-3 text-right">{item.gst_rate}%</td>
-                <td className="px-4 py-3">
-                  <Button size="sm" variant="outline" onClick={() => setEditing(item)}>Edit</Button>
+                <td className="px-4 py-3 text-right">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    aria-label={`Edit ${item.name}`}
+                    onClick={() => setEditing(item)}
+                  >
+                    Edit
+                  </Button>
                 </td>
               </tr>
             ))}
