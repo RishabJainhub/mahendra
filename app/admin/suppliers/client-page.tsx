@@ -212,7 +212,13 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Link
-                        href={`/admin/bills?supplierId=${s.id}`}
+                        href={`/admin/suppliers/${s.id}`}
+                        className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      >
+                        Dashboard
+                      </Link>
+                      <Link
+                        href={`/admin/bills?supplier=${s.id}`}
                         className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent"
                       >
                         Bills
@@ -314,7 +320,7 @@ function Modal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-card p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white p-6 text-slate-950 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
           <Button type="button" variant="ghost" size="sm" onClick={onClose}>✕</Button>

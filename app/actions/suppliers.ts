@@ -39,6 +39,68 @@ export async function getSuppliers() {
   }
 }
 
+export async function getSupplierAdminDashboard(id: string) {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    const { data: supplier, error: supplierError } = await supabase
+      .from('suppliers')
+      .select('*, pricing_rule:pricing_rules(*)')
+      .eq('id', id)
+      .single();
+
+    if (supplierError || !supplier) {
+      logger.warn('getSupplierAdminDashboard supplier not found', { reqId, id });
+      return null;
+    }
+
+    const { data: bills } = await supabase
+      .from('bills')
+      .select('*, bill_items(count)')
+      .eq('supplier_id', id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const { count: totalBills } = await supabase
+      .from('bills')
+      .select('*', { count: 'exact', head: true })
+      .eq('supplier_id', id);
+
+    const { count: printedBills } = await supabase
+      .from('bills')
+      .select('*', { count: 'exact', head: true })
+      .eq('supplier_id', id)
+      .eq('status', 'printed');
+
+    const { data: valueRows } = await supabase
+      .from('bills')
+      .select('total_amount')
+      .eq('supplier_id', id)
+      .neq('status', 'cancelled');
+
+    const { data: imports } = await supabase
+      .from('tally_imports')
+      .select('*')
+      .eq('supplier_id', id)
+      .order('created_at', { ascending: false })
+      .limit(8);
+
+    return {
+      supplier,
+      bills: bills ?? [],
+      imports: imports ?? [],
+      totalBills: totalBills ?? 0,
+      printedBills: printedBills ?? 0,
+      totalValue: (valueRows ?? []).reduce((sum, bill) => sum + Number(bill.total_amount), 0),
+    };
+  } catch (err) {
+    logger.error('getSupplierAdminDashboard error', { reqId, err });
+    return null;
+  }
+}
+
 export async function inviteSupplier(
   formData: FormData
 ): Promise<
