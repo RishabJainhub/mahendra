@@ -99,7 +99,11 @@ export async function importTallyBill(
     const parsed = TallyImportInputSchema.safeParse(input);
     if (!parsed.success) return fromZod(parsed.error);
 
-    const supplierId = input.supplierId ?? user.supplier_id;
+    // Only admins may import on behalf of another supplier. Suppliers are
+    // always pinned to their own supplier_id regardless of the input value
+    // (RLS enforces this too, but fail closed before touching the DB).
+    const supplierId =
+      user.role === 'admin' ? input.supplierId ?? user.supplier_id : user.supplier_id;
     if (!supplierId) return fail('Supplier ID required', 'VALIDATION_ERROR');
 
     let billData: { number: string; date: string; party: string; totals: { amount: number } };
@@ -139,7 +143,7 @@ export async function importTallyBill(
 
     if (billError || !bill) {
       logger.error('importTallyBill bill insert failed', { reqId, error: billError?.message });
-      return fail(billError?.message ?? 'Failed to create bill');
+      return fail('Failed to create bill');
     }
 
     const billItems = items.map((item) => ({
@@ -153,7 +157,7 @@ export async function importTallyBill(
     const { error: itemsError } = await supabase.from('bill_items').insert(billItems);
     if (itemsError) {
       logger.error('importTallyBill items insert failed', { reqId, error: itemsError.message });
-      return fail(itemsError.message);
+      return fail('Failed to create bill items');
     }
 
     await supabase.from('tally_imports').insert({
@@ -191,7 +195,7 @@ export async function cancelBill(id: string): Promise<ActionResult<{ id: string 
 
     if (error) {
       logger.error('cancelBill failed', { reqId, error: error.message });
-      return fail(error.message);
+      return fail('Cancel failed');
     }
 
     await writeAudit('cancel', 'bill', id, {});
@@ -223,7 +227,7 @@ export async function markBillPrinted(id: string): Promise<ActionResult<{ id: st
 
     if (error) {
       logger.error('markBillPrinted failed', { reqId, error: error.message });
-      return fail(error.message);
+      return fail('Mark printed failed');
     }
 
     await writeAudit('print', 'bill', id, {});

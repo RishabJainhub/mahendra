@@ -36,7 +36,10 @@ export async function upsertLayout(formData: FormData): Promise<ActionResult<{ i
     const supabase = await createClient();
     if (id) {
       const { error } = await supabase.from('layouts').update(payload).eq('id', id);
-      if (error) return fail(error.message);
+      if (error) {
+        logger.error('upsertLayout update failed', { reqId, id, error: error.message });
+        return fail('Layout save failed');
+      }
       revalidatePath('/admin/layouts');
       return ok({ id });
     }
@@ -46,7 +49,10 @@ export async function upsertLayout(formData: FormData): Promise<ActionResult<{ i
       .insert({ ...payload, tenant_id: admin.tenant_id })
       .select('id')
       .single();
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('upsertLayout insert failed', { reqId, error: error.message });
+      return fail('Layout save failed');
+    }
     logger.info('upsertLayout success', { reqId, id: data.id });
     revalidatePath('/admin/layouts');
     return ok({ id: data.id });
@@ -62,7 +68,10 @@ export async function deleteLayout(id: string): Promise<ActionResult<{ id: strin
     await requireAdmin();
     const supabase = await createClient();
     const { error } = await supabase.from('layouts').delete().eq('id', id);
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('deleteLayout failed', { reqId, id, error: error.message });
+      return fail('Delete failed');
+    }
     logger.info('deleteLayout success', { reqId, id });
     revalidatePath('/admin/layouts');
     return ok({ id });

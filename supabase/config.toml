@@ -52,10 +52,12 @@ additional_redirect_urls = ["https://127.0.0.1:3000"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
-enable_signup = true
+# Invite-only app: suppliers are provisioned by an admin (auth.admin.createUser).
+# Public self-registration must stay disabled here AND in the hosted project settings.
+enable_signup = false
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
-minimum_password_length = 6
+minimum_password_length = 8
 password_requirements = ""
 
 [auth.rate_limit]
@@ -67,7 +69,7 @@ sign_in_sign_ups = 30
 token_verifications = 30
 
 [auth.email]
-enable_signup = true
+enable_signup = false
 double_confirm_changes = true
 enable_confirmations = false
 secure_password_change = false

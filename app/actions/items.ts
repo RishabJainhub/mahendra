@@ -40,7 +40,10 @@ export async function upsertItem(formData: FormData): Promise<ActionResult<{ id:
     const supabase = await createClient();
     if (id) {
       const { error } = await supabase.from('items').update(payload).eq('id', id);
-      if (error) return fail(error.message);
+      if (error) {
+        logger.error('upsertItem update failed', { reqId, id, error: error.message });
+        return fail('Item save failed');
+      }
       logger.info('upsertItem update', { reqId, id });
       revalidatePath('/admin/items');
       return ok({ id });
@@ -51,7 +54,10 @@ export async function upsertItem(formData: FormData): Promise<ActionResult<{ id:
       .insert({ ...payload, tenant_id: admin.tenant_id })
       .select('id')
       .single();
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('upsertItem insert failed', { reqId, error: error.message });
+      return fail('Item save failed');
+    }
     logger.info('upsertItem insert', { reqId, id: data.id });
     revalidatePath('/admin/items');
     return ok({ id: data.id });
@@ -75,7 +81,10 @@ export async function bulkImportItems(
     }));
 
     const { error } = await supabase.from('items').insert(rows);
-    if (error) return fail(error.message);
+    if (error) {
+      logger.error('bulkImportItems failed', { reqId, error: error.message });
+      return fail('Bulk import failed');
+    }
     logger.info('bulkImportItems success', { reqId, count: items.length });
     revalidatePath('/admin/items');
     return ok({ count: items.length });

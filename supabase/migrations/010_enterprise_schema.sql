@@ -5,6 +5,9 @@ ALTER TABLE public.bill_items
   ADD COLUMN IF NOT EXISTS tenant_id uuid REFERENCES public.tenants (id) ON DELETE CASCADE;
 
 ALTER TABLE public.tally_imports
+  ALTER COLUMN status DROP DEFAULT;
+
+ALTER TABLE public.tally_imports
   ALTER COLUMN status TYPE public.import_status
   USING (
     CASE status
