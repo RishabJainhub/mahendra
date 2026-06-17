@@ -15,16 +15,23 @@ export async function getSuppliers() {
   try {
     await requireAdmin();
     const supabase = await createClient();
-    const { data, error } = await supabase
+    const { data: suppliers, error } = await supabase
       .from('suppliers')
-      .select('*, pricing_rule:pricing_rules(*)')
+      .select('*')
       .order('name');
 
     if (error) {
       logger.error('getSuppliers failed', { reqId, error: error.message });
       return [];
     }
-    return data ?? [];
+
+    const { data: rules } = await supabase.from('pricing_rules').select('*');
+    const ruleBySupplier = new Map((rules ?? []).map((r) => [r.supplier_id, r]));
+
+    return (suppliers ?? []).map((s) => ({
+      ...s,
+      pricing_rule: ruleBySupplier.get(s.id) ?? null,
+    }));
   } catch (err) {
     logger.error('getSuppliers error', { reqId, err });
     return [];
