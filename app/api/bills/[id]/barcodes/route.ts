@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateBarcodePng } from '@/lib/barcode';
+import { createClient } from '@/lib/supabase/server';
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   await params;
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(_request.url);
 
   const data = searchParams.get('data');

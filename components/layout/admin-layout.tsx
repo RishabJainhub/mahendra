@@ -14,6 +14,7 @@ const NAV = [
   { href: '/admin/pricing', label: 'Pricing' },
   { href: '/admin/layouts', label: 'Layouts' },
   { href: '/admin/print', label: 'Print' },
+  { href: '/admin/verify', label: 'System Verify' },
   { href: '/admin/settings', label: 'Settings' },
 ];
 
