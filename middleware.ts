@@ -55,7 +55,24 @@ export async function middleware(request: NextRequest) {
   if (user) {
     const appMeta = user.app_metadata ?? {};
     const role = appMeta.role as string | undefined;
+    const tenantId = appMeta.tenant_id as string | undefined;
     const mustReset = appMeta.must_reset_password === true;
+    const hasValidSession =
+      (role === 'admin' || role === 'supplier') && Boolean(tenantId);
+
+    if (!hasValidSession) {
+      if (pathname === '/login') {
+        await supabase.auth.signOut();
+        return response;
+      }
+      if (!isPublicPath(pathname)) {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        return NextResponse.redirect(url);
+      }
+      return response;
+    }
 
     if (mustReset && role === 'supplier' && !pathname.startsWith('/reset-password')) {
       const url = request.nextUrl.clone();
@@ -71,7 +88,7 @@ export async function middleware(request: NextRequest) {
       return new NextResponse('Forbidden', { status: 403 });
     }
 
-    if (PUBLIC_PATHS.includes(pathname) && !mustReset) {
+    if (PUBLIC_PATHS.includes(pathname) && !mustReset && hasValidSession) {
       const url = request.nextUrl.clone();
       url.pathname = role === 'admin' ? '/admin' : '/supplier';
       return NextResponse.redirect(url);
