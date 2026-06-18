@@ -39,10 +39,62 @@ node create_admin.js
 
 # 6. Run dev server (port 3001 — avoids clash with other apps on 3000)
 npm run dev
+Open **http://localhost:3001** and sign in.
+
+---
+
+## Cloud Supabase (production / no Docker)
+
+Your cloud project is **`zpdrnblpvuijwghfxmgm`** (Singapore). Schema is already applied (20 migrations).
+
+**One command setup** (from repo root):
+
+```bash
+npm install
+chmod +x scripts/setup-cloud.sh
+npx supabase login          # once — opens browser
+./scripts/setup-cloud.sh
+```
+
+The script will:
+1. Link CLI to your cloud project
+2. Push any new migrations
+3. Write `.env.local` with cloud keys (CLI or paste from dashboard)
+4. Prompt you to set Auth URLs (see below)
+5. Run `create_admin.js` for your login
+
+**Non-interactive** (if you have keys ready):
+
+```bash
+export SUPABASE_PROJECT_REF=zpdrnblpvuijwghfxmgm
+export NEXT_PUBLIC_SUPABASE_ANON_KEY='eyJ...'
+export SUPABASE_SERVICE_ROLE_KEY='eyJ...'
+export ADMIN_EMAIL='you@example.com'
+export ADMIN_PASSWORD='your-secure-password'
+./scripts/setup-cloud.sh
+```
+
+Get keys from: [Supabase API settings](https://supabase.com/dashboard/project/zpdrnblpvuijwghfxmgm/settings/api)
+
+**Auth URLs** (required once, in dashboard → Authentication → URL configuration):
+
+| Setting | Value |
+|---------|--------|
+| Site URL | `http://localhost:3001` |
+| Redirect URLs | `http://localhost:3001/**` |
+
+Verify and run:
+
+```bash
+npm run check:cloud
+npm run diagnose-login
+npm run dev
 # → http://localhost:3001
 ```
 
-## Localhost not working?
+When you deploy (e.g. Vercel), add the same three env vars there and update Site URL to your production domain.
+
+---
 
 Run the diagnostic first:
 
