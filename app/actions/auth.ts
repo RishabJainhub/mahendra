@@ -54,7 +54,10 @@ async function resolveLoginRole(
   return { role: profile.role as 'admin' | 'supplier', tenantId: profile.tenant_id };
 }
 
-export async function signIn(formData: FormData): Promise<ActionResult<never>> {
+export async function signIn(
+  _prevState: ActionResult<never> | null,
+  formData: FormData
+): Promise<ActionResult<never>> {
   const reqId = newRequestId();
   try {
     const email = String(formData.get('email') ?? '');

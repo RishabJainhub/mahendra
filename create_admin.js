@@ -78,6 +78,16 @@ async function findAuthUserByEmail(email) {
   return null;
 }
 
+async function ensureSeedTenant() {
+  const { error } = await supabase.from('tenants').upsert({
+    id: TENANT_ID,
+    name: 'Mahendra Distributors',
+    gstin: null,
+    address: null,
+  });
+  if (error) throw error;
+}
+
 async function upsertAdminProfile(userId, email) {
   const { error: profileError } = await supabase.from('users').upsert({
     id: userId,
@@ -159,6 +169,7 @@ async function main() {
     process.exit(1);
   }
 
+  await ensureSeedTenant();
   const { userId, created } = await createOrUpdateAdmin(email, password);
 
   console.log(`\nAdmin user ${created ? 'created' : 'updated'} successfully!`);

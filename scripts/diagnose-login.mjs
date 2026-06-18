@@ -36,6 +36,13 @@ const service = envFile.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVIC
 console.log('\nMahendra Distributors — login diagnostic\n');
 console.log('App URL: http://localhost:3001\n');
 
+const isLocalUrl = Boolean(url && (url.includes('127.0.0.1') || url.includes('localhost')));
+const isCloudUrl = Boolean(url && url.includes('supabase.co'));
+
+if (isLocalUrl) console.log('Supabase mode: local (Docker)\n');
+else if (isCloudUrl) console.log('Supabase mode: cloud\n');
+else if (url) console.log('Supabase mode: unknown URL\n');
+
 if (!fs.existsSync('.env.local')) {
   issues.push('Missing .env.local');
   hints.push('Run: ./scripts/setup-local.sh');
@@ -47,16 +54,22 @@ if (!fs.existsSync('.env.local')) {
     issues.push('.env.local still has placeholder keys');
     hints.push('Run: ./scripts/setup-local.sh');
   }
+  if (isCloudUrl && process.argv.includes('--local')) {
+    issues.push('.env.local points to cloud but you asked for local setup');
+    hints.push('Run: ./scripts/setup-local.sh to regenerate local .env.local');
+  }
 }
 
-try {
-  execSync('npx supabase status', { stdio: 'pipe', timeout: TIMEOUT_MS });
-} catch {
-  issues.push('Supabase is not running (or Docker is starting)');
-  hints.push('Run: npx supabase start');
+if (isLocalUrl) {
+  try {
+    execSync('npx supabase status', { stdio: 'pipe', timeout: TIMEOUT_MS });
+  } catch {
+    issues.push('Local Supabase is not running (Docker may be stopped)');
+    hints.push('Open Docker Desktop, then: ./scripts/setup-local.sh');
+  }
 }
 
-if (url && service && issues.length === 0) {
+if (url && service && (isLocalUrl || isCloudUrl)) {
   const admin = createClient(url, service, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
