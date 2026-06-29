@@ -280,6 +280,85 @@ export async function deactivateSupplier(id: string): Promise<ActionResult<{ id:
   }
 }
 
+export async function deleteSupplier(id: string): Promise<ActionResult<{ id: string }>> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    // Block delete if the supplier has any bills. The FK is ON DELETE CASCADE,
+    // so deleting the supplier row would silently delete all their bills too —
+    // the admin must export and clear the month (or delete bills) first.
+    const { count: billCount, error: billCountErr } = await supabase
+      .from('bills')
+      .select('*', { count: 'exact', head: true })
+      .eq('supplier_id', id);
+
+    if (billCountErr) {
+      logger.error('deleteSupplier bill count failed', { reqId, error: billCountErr.message });
+      return fail(billCountErr.message);
+    }
+    if (billCount && billCount > 0) {
+      return fail(
+        `Cannot delete — this supplier has ${billCount} bill(s). Export and clear the month, or delete the bills first.`,
+        'SUPPLIER_HAS_BILLS',
+        { billCount }
+      );
+    }
+
+    // Confirm the supplier exists (avoid a misleading "success" + audit row
+    // for a non-existent id).
+    const { data: existing } = await supabase
+      .from('suppliers')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!existing) {
+      return fail('Supplier not found');
+    }
+
+    // Find the linked auth user so we can remove their auth account too.
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supplier_id', id)
+      .maybeSingle();
+
+    const service = createServiceClient();
+
+    // Delete the supplier row first — cascades pricing_rules and tally_imports,
+    // and sets users.supplier_id to null.
+    const { error: supplierErr } = await service.from('suppliers').delete().eq('id', id);
+    if (supplierErr) {
+      logger.error('deleteSupplier supplier delete failed', { reqId, error: supplierErr.message });
+      return fail(supplierErr.message);
+    }
+
+    // Then remove the auth account (cascades the users row). Best-effort —
+    // if the auth user was already removed, this is a no-op.
+    if (userRow?.id) {
+      const { error: authErr } = await service.auth.admin.deleteUser(userRow.id);
+      if (authErr) {
+        logger.warn('deleteSupplier auth user delete failed', {
+          reqId,
+          authUserId: userRow.id,
+          error: authErr.message,
+        });
+      }
+    }
+
+    await writeAudit('delete', 'supplier', id, {});
+    logger.info('deleteSupplier success', { reqId, id });
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/pricing');
+
+    return ok({ id });
+  } catch (err) {
+    logger.error('deleteSupplier error', { reqId, err });
+    return fail('Delete failed');
+  }
+}
+
 export async function upsertPricingRule(
   formData: FormData
 ): Promise<ActionResult<{ id: string }>> {
