@@ -1,4 +1,5 @@
 import type { TallyBill, TallyItem } from './xml-parser';
+import { extractHsnFromDescription } from './hsn';
 
 export type ColumnMapping = Record<string, string>;
 
@@ -27,7 +28,8 @@ export function parseTallyXlsx(
     const qty = Number(row[mapping.qty ?? 'Qty'] ?? 0);
     const rate = Number(row[mapping.rate ?? 'Rate'] ?? 0);
     const amount = Number(row[mapping.amount ?? 'Amount'] ?? qty * rate);
-    const hsn = row[mapping.hsn ?? 'HSN'] ? String(row[mapping.hsn ?? 'HSN']) : undefined;
+    const explicitHsn = row[mapping.hsn ?? 'HSN'] ? String(row[mapping.hsn ?? 'HSN']) : undefined;
+    const hsn = explicitHsn || extractHsnFromDescription(name);
     return { sku, name, qty, rate, amount, hsn };
   });
 

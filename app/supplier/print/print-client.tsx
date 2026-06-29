@@ -1,16 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
+import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import { getBillStickers, markBillPrinted } from '@/app/actions/bills';
-import { renderBillPDF } from '@/lib/pdf';
+import { renderBillPDF, DEFAULT_LABEL_LAYOUT } from '@/lib/pdf';
 import { Button } from '@/components/ui/button';
-
-const PDFViewer = dynamic(
-  () => import('@react-pdf/renderer').then((mod) => mod.PDFViewer),
-  { ssr: false, loading: () => <p className="p-4">Loading preview...</p> }
-);
+import { PdfPrintTools } from '@/components/pdf/pdf-print-tools';
 
 type Props = {
   bills: { id: string; bill_number: string; bill_date: string; status?: string }[];
@@ -21,16 +17,19 @@ type Props = {
 export function PrintPageClient({ bills, layout, initialBillId }: Props) {
   const router = useRouter();
   const [billId, setBillId] = useState(initialBillId ?? '');
-  const [pdfDoc, setPdfDoc] = useState<React.ReactElement | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<ReactElement | null>(null);
+  const [fileName, setFileName] = useState('labels.pdf');
   const [loading, setLoading] = useState(false);
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const layoutConfig = layout ?? DEFAULT_LABEL_LAYOUT;
 
   useEffect(() => {
     if (initialBillId) setBillId(initialBillId);
   }, [initialBillId]);
 
-  async function handlePreview() {
+  async function handleGenerate() {
     if (!billId) return;
     setLoading(true);
     setError(null);
@@ -42,12 +41,9 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
         setError('Could not load this bill.');
         return;
       }
-      const doc = renderBillPDF(
-        sticker.bill,
-        sticker.items,
-        layout ?? { grid_cols: 3, label_w: 120, label_h: 80, include_fields: ['sku', 'name', 'barcode'] }
-      );
+      const doc = renderBillPDF(sticker.bill, sticker.items, layoutConfig);
       setPdfDoc(doc);
+      setFileName(`labels-${sticker.bill.bill_number}.pdf`);
     } finally {
       setLoading(false);
     }
@@ -66,9 +62,13 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">Print Barcodes</h1>
+      <h1 className="mb-6 text-2xl font-bold">Print Labels</h1>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <select value={billId} onChange={(e) => setBillId(e.target.value)} className="h-10 rounded-md border px-3 text-sm">
+        <select
+          value={billId}
+          onChange={(e) => setBillId(e.target.value)}
+          className="h-10 rounded-md border px-3 text-sm"
+        >
           <option value="">Select bill</option>
           {bills.map((b) => (
             <option key={b.id} value={b.id}>
@@ -77,23 +77,17 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
             </option>
           ))}
         </select>
-        <Button onClick={handlePreview} disabled={!billId || loading}>
-          {loading ? 'Generating…' : 'Generate Preview'}
+        <Button onClick={() => void handleGenerate()} disabled={!billId || loading}>
+          {loading ? 'Generating…' : 'Generate PDF'}
         </Button>
-        {pdfDoc && (
-          <Button variant="outline" onClick={handleMarkPrinted} disabled={marked}>
-            {marked ? 'Marked as Printed' : 'Mark as Printed'}
-          </Button>
-        )}
       </div>
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-      {pdfDoc && (
-        <div className="h-[80vh] rounded-lg border">
-          <PDFViewer width="100%" height="100%" showToolbar>
-            {pdfDoc as never}
-          </PDFViewer>
-        </div>
-      )}
+      <PdfPrintTools
+        doc={pdfDoc}
+        fileName={fileName}
+        onMarkPrinted={pdfDoc ? handleMarkPrinted : undefined}
+        marked={marked}
+      />
     </div>
   );
 }

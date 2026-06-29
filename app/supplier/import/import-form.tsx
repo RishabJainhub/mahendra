@@ -1,12 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/pricing';
 import { TallyImportHelp } from '@/components/tally/import-help';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 import { arrayBufferToBase64 } from '@/lib/file-utils';
+
+type DuplicateBill = {
+  existingBillId: string;
+  billNumber: string;
+  supplierName: string;
+};
 
 type FileType = 'xml' | 'xlsx' | 'xls' | 'pdf';
 
@@ -35,6 +42,7 @@ export function ImportForm({ mappings }: Props) {
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -43,6 +51,7 @@ export function ImportForm({ mappings }: Props) {
 
     setMessage(null);
     setError(null);
+    setDuplicate(null);
     setLoading(true);
 
     const fileType = detectFileType(file.name);
@@ -83,20 +92,40 @@ export function ImportForm({ mappings }: Props) {
     }
   }
 
-  async function handleConfirm() {
+  async function runImport(replaceExisting: boolean) {
     if (!fileData) return;
     setLoading(true);
     setError(null);
-    const result = await importTallyBill(fileData);
+    const result = await importTallyBill({ ...fileData, replaceExisting });
     setLoading(false);
     if (result.ok) {
-      setMessage(`Imported ${result.data.itemCount} items successfully`);
+      setMessage(
+        result.data.replaced
+          ? `Replaced existing bill — imported ${result.data.itemCount} items`
+          : `Imported ${result.data.itemCount} items successfully`
+      );
       setPreview(null);
       setBillMeta(null);
       setFileData(null);
+      setDuplicate(null);
+    } else if (result.code === 'DUPLICATE_BILL' && result.meta?.existingBillId) {
+      setDuplicate({
+        existingBillId: String(result.meta.existingBillId),
+        billNumber: String(result.meta.billNumber ?? billMeta?.number ?? ''),
+        supplierName: String(result.meta.supplierName ?? ''),
+      });
     } else {
       setError(result.error);
     }
+  }
+
+  function handleConfirm() {
+    setDuplicate(null);
+    void runImport(false);
+  }
+
+  function handleReplace() {
+    void runImport(true);
   }
 
   const showMapping = !fileData || fileData.fileType === 'xlsx' || fileData.fileType === 'xls';
@@ -106,6 +135,40 @@ export function ImportForm({ mappings }: Props) {
       <TallyImportHelp />
       {message && <p className="text-sm text-green-600">{message}</p>}
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {duplicate && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <p className="font-medium">Bill {duplicate.billNumber} already exists.</p>
+          <p className="mt-1 text-amber-900">
+            Open the existing bill, or replace it to re-import this file.
+            Replacing deletes the existing bill and its line items.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={`/supplier/print?billId=${duplicate.existingBillId}`}
+              className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent"
+            >
+              Open existing bill
+            </Link>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleReplace}
+              disabled={loading}
+            >
+              {loading ? 'Replacing…' : 'Replace existing'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setDuplicate(null)}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {showMapping && (
         <div>

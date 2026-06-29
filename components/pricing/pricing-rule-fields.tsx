@@ -1,14 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { describeFormula, PRICING_MODELS, type PricingModel } from '@/lib/pricing';
+import { describeFormula } from '@/lib/pricing';
 import { Input } from '@/components/ui/input';
-import { Label, SelectField } from '@/components/ui/field';
+import { Label } from '@/components/ui/field';
 
 export type PricingRuleValues = {
-  model: PricingModel;
-  margin_pct: number;
-  markup_pct: number;
+  ma_markup1_pct: number;
+  ma_markup2_pct: number;
+  dna_markup1_pct: number;
+  dna_markup2_pct: number;
   gst_pct: number;
 };
 
@@ -23,78 +24,102 @@ function fieldName(prefix: string | undefined, key: string) {
 }
 
 export function PricingRuleFields({ prefix, defaultValues, showPreview = true }: Props) {
-  const [model, setModel] = useState<PricingModel>(defaultValues?.model ?? 'company151');
-  const [margin, setMargin] = useState(String(defaultValues?.margin_pct ?? 0));
-  const [markup, setMarkup] = useState(String(defaultValues?.markup_pct ?? 0));
+  const [maM1, setMaM1] = useState(String(defaultValues?.ma_markup1_pct ?? 0));
+  const [maM2, setMaM2] = useState(String(defaultValues?.ma_markup2_pct ?? 0));
+  const [dnaM1, setDnaM1] = useState(String(defaultValues?.dna_markup1_pct ?? 0));
+  const [dnaM2, setDnaM2] = useState(String(defaultValues?.dna_markup2_pct ?? 0));
   const [gst, setGst] = useState(String(defaultValues?.gst_pct ?? 5));
 
   const preview = useMemo(
     () =>
       describeFormula({
-        model,
-        margin_pct: Number(margin) || 0,
-        markup_pct: Number(markup) || 0,
+        ma_markup1_pct: Number(maM1) || 0,
+        ma_markup2_pct: Number(maM2) || 0,
+        dna_markup1_pct: Number(dnaM1) || 0,
+        dna_markup2_pct: Number(dnaM2) || 0,
         gst_pct: Number(gst) || 0,
       }),
-    [model, margin, markup, gst]
+    [maM1, maM2, dnaM1, dnaM2, gst]
   );
-
-  const isStandard = model === 'standard';
-  const modelMeta = PRICING_MODELS.find((m) => m.value === model);
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-slate-950">
       <div>
         <p className="text-sm font-semibold text-slate-950">Pricing formula</p>
-        <p className="text-xs text-slate-600">Applied automatically when this supplier imports a Tally bill.</p>
+        <p className="text-xs text-slate-600">
+          Two consecutive markups are applied to the Tally rate to produce MA and DNA prices on
+          each label.
+        </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <Label htmlFor={fieldName(prefix, 'model')}>Formula type</Label>
-          <SelectField
-            name={fieldName(prefix, 'model')}
-            id={fieldName(prefix, 'model')}
-            value={model}
-            onChange={(e) => setModel(e.target.value as PricingModel)}
-          >
-            {PRICING_MODELS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </SelectField>
-          {modelMeta && <p className="mt-1 text-xs text-slate-600">{modelMeta.description}</p>}
+      <fieldset className="rounded-md border border-slate-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+          MA price
+        </legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor={fieldName(prefix, 'ma_markup1_pct')}>Markup 1 %</Label>
+            <Input
+              id={fieldName(prefix, 'ma_markup1_pct')}
+              name={fieldName(prefix, 'ma_markup1_pct')}
+              type="number"
+              step="0.01"
+              min="0"
+              value={maM1}
+              onChange={(e) => setMaM1(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor={fieldName(prefix, 'ma_markup2_pct')}>Markup 2 %</Label>
+            <Input
+              id={fieldName(prefix, 'ma_markup2_pct')}
+              name={fieldName(prefix, 'ma_markup2_pct')}
+              type="number"
+              step="0.01"
+              min="0"
+              value={maM2}
+              onChange={(e) => setMaM2(e.target.value)}
+            />
+          </div>
         </div>
+      </fieldset>
 
-        <div>
-          <Label htmlFor={fieldName(prefix, 'margin_pct')}>Margin %</Label>
-          <Input
-            id={fieldName(prefix, 'margin_pct')}
-            name={fieldName(prefix, 'margin_pct')}
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
-            value={margin}
-            onChange={(e) => setMargin(e.target.value)}
-            disabled={!isStandard}
-          />
+      <fieldset className="rounded-md border border-slate-200 p-3">
+        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+          DNA price
+        </legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor={fieldName(prefix, 'dna_markup1_pct')}>% on rate</Label>
+            <Input
+              id={fieldName(prefix, 'dna_markup1_pct')}
+              name={fieldName(prefix, 'dna_markup1_pct')}
+              type="number"
+              step="0.01"
+              min="0"
+              value={dnaM1}
+              onChange={(e) => setDnaM1(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor={fieldName(prefix, 'dna_markup2_pct')}>Markup %</Label>
+            <Input
+              id={fieldName(prefix, 'dna_markup2_pct')}
+              name={fieldName(prefix, 'dna_markup2_pct')}
+              type="number"
+              step="0.01"
+              min="0"
+              value={dnaM2}
+              onChange={(e) => setDnaM2(e.target.value)}
+            />
+          </div>
         </div>
-        <div>
-          <Label htmlFor={fieldName(prefix, 'markup_pct')}>Markup %</Label>
-          <Input
-            id={fieldName(prefix, 'markup_pct')}
-            name={fieldName(prefix, 'markup_pct')}
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
-            value={markup}
-            onChange={(e) => setMarkup(e.target.value)}
-            disabled={!isStandard}
-          />
-        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          DNA = rate + (% on rate), then × (1 + Markup %).
+        </p>
+      </fieldset>
+
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor={fieldName(prefix, 'gst_pct')}>GST %</Label>
           <Input

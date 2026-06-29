@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSupplierAdminDashboard } from '@/app/actions/suppliers';
-import { formatINR, describeFormula, formatModelLabel, type PricingModel } from '@/lib/pricing';
+import { formatINR, describeFormula, formatSupplierCode } from '@/lib/pricing';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
@@ -29,18 +29,21 @@ export default async function AdminSupplierDashboardPage({ params }: Props) {
 
   const formula = pricingRule
     ? describeFormula({
-        model: pricingRule.model as PricingModel,
-        margin_pct: Number(pricingRule.margin_pct),
-        markup_pct: Number(pricingRule.markup_pct),
-        gst_pct: Number(pricingRule.gst_pct),
+        ma_markup1_pct: Number(pricingRule.ma_markup1_pct) || 0,
+        ma_markup2_pct: Number(pricingRule.ma_markup2_pct) || 0,
+        dna_markup1_pct: Number(pricingRule.dna_markup1_pct) || 0,
+        dna_markup2_pct: Number(pricingRule.dna_markup2_pct) || 0,
+        gst_pct: Number(pricingRule.gst_pct) || 0,
       })
     : 'No formula assigned';
+
+  const supplierCode = formatSupplierCode(supplier.code_prefix, supplier.code_number);
 
   const kpis = [
     { label: 'Total Bills', value: String(totalBills) },
     { label: 'Printed Bills', value: String(printedBills) },
     { label: 'Total Value', value: formatINR(totalValue) },
-    { label: 'Formula', value: pricingRule ? formatModelLabel(pricingRule.model) : '—' },
+    { label: 'Supplier Code', value: supplierCode || '—' },
   ];
 
   return (
