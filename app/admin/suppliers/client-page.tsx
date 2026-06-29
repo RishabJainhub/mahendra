@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Users, Pencil, UserX, UserCheck } from 'lucide-react';
+import { Users, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
 import {
   inviteSupplier,
   updateSupplier,
   deactivateSupplier,
   activateSupplier,
+  deleteSupplier,
   upsertPricingRule,
 } from '@/app/actions/suppliers';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,8 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function handleInvite(formData: FormData) {
     setLoading(true);
@@ -113,6 +116,21 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
       setMessage(supplier.active ? `${supplier.name} deactivated.` : `${supplier.name} reactivated.`);
     } else {
       setError(result.error);
+    }
+  }
+
+  async function handleDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError(null);
+    const result = await deleteSupplier(pendingDelete.id);
+    setDeleting(false);
+    if (result.ok) {
+      setMessage(`${pendingDelete.name} deleted.`);
+      setPendingDelete(null);
+    } else {
+      setError(result.error);
+      setPendingDelete(null);
     }
   }
 
@@ -238,6 +256,15 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                       >
                         {s.active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:bg-destructive/10"
+                        onClick={() => { setPendingDelete(s); setError(null); }}
+                        title="Delete supplier"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -245,6 +272,25 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {pendingDelete && (
+        <Modal title="Delete supplier?" onClose={() => setPendingDelete(null)}>
+          <p className="text-sm text-muted-foreground">
+            Delete <span className="font-medium text-foreground">{pendingDelete.name}</span>? This removes the
+            supplier, their pricing formula, and their login access. This can&apos;t be undone.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The supplier must have <span className="font-medium">zero bills</span> — export and clear the month,
+            or delete the bills first.
+          </p>
+          <div className="mt-4 flex gap-2">
+            <Button variant="destructive" disabled={deleting} onClick={handleDelete}>
+              {deleting ? 'Deleting…' : 'Delete supplier'}
+            </Button>
+            <Button variant="outline" onClick={() => setPendingDelete(null)}>Cancel</Button>
+          </div>
+        </Modal>
       )}
 
       {showInvite && (
