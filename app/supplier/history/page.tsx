@@ -17,6 +17,16 @@ type Props = {
   searchParams: Promise<{ status?: string; from?: string; to?: string; page?: string }>;
 };
 
+function buildPageUrl(page: number, params: { status?: string; from?: string; to?: string }) {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  if (params.from) q.set('from', params.from);
+  if (params.to) q.set('to', params.to);
+  if (page > 1) q.set('page', String(page));
+  const qs = q.toString();
+  return `/supplier/history${qs ? `?${qs}` : ''}`;
+}
+
 export default async function SupplierHistoryPage({ searchParams }: Props) {
   const user = await requireSupplier();
   const params = await searchParams;
@@ -66,7 +76,9 @@ export default async function SupplierHistoryPage({ searchParams }: Props) {
                   <Badge variant={STATUS_VARIANT[bill.status] ?? 'outline'}>{bill.status}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <Link href="/supplier/print" className="text-primary hover:underline">View</Link>
+                  <Link href={`/supplier/print?billId=${bill.id}`} className="text-primary hover:underline">
+                    Print
+                  </Link>
                 </td>
               </tr>
             ))}
@@ -80,11 +92,11 @@ export default async function SupplierHistoryPage({ searchParams }: Props) {
       {totalPages > 1 && (
         <div className="mt-4 flex gap-2">
           {page > 1 && (
-            <Link href={`/supplier/history?page=${page - 1}`} className="text-sm text-primary hover:underline">← Prev</Link>
+            <Link href={buildPageUrl(page - 1, params)} className="text-sm text-primary hover:underline">← Prev</Link>
           )}
           <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
           {page < totalPages && (
-            <Link href={`/supplier/history?page=${page + 1}`} className="text-sm text-primary hover:underline">Next →</Link>
+            <Link href={buildPageUrl(page + 1, params)} className="text-sm text-primary hover:underline">Next →</Link>
           )}
         </div>
       )}

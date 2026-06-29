@@ -20,19 +20,54 @@ export const BillItemInputSchema = z.object({
   rate: z.number().nonnegative(),
 });
 
+export const ManualBillItemSchema = z.object({
+  description: z.string().min(1).max(255),
+  hsn: z.string().max(16).optional().or(z.literal('')),
+  qty: z.coerce.number().positive(),
+  rate: z.coerce.number().nonnegative(),
+});
+
+export const ManualBillInputSchema = z.object({
+  supplierId: z.string().uuid(),
+  billNumber: z.string().min(1).max(255),
+  billDate: z.string().min(1),
+  items: z.array(ManualBillItemSchema).min(1, 'Add at least one line item'),
+});
+
+const optionalShortString = z
+  .string()
+  .max(16)
+  .optional()
+  .transform((v) => (v == null ? '' : v.trim()));
+
 export const SupplierInviteInputSchema = z.object({
   name: z.string().min(1).max(255),
   email: z.string().email(),
   phone: z.string().optional(),
-  pricing_rule_id: z.string().uuid().optional(),
+  code_prefix: optionalShortString,
+  code_number: optionalShortString,
+  ma_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  ma_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  gst_pct: z.coerce.number().min(0).max(100).default(5),
 });
 
 export const PricingRuleInputSchema = z.object({
   supplier_id: z.string().uuid(),
-  model: z.enum(['standard', 'company151']),
-  margin_pct: z.number().min(0).max(100).default(0),
-  markup_pct: z.number().min(0).max(100).default(0),
-  gst_pct: z.number().min(0).max(100).default(5),
+  ma_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  ma_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  gst_pct: z.coerce.number().min(0).max(100).default(5),
+});
+
+export const SupplierUpdateInputSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().optional(),
+  code_prefix: optionalShortString,
+  code_number: optionalShortString,
 });
 
 export const ResetPasswordSchema = z
@@ -47,8 +82,11 @@ export const ResetPasswordSchema = z
 
 export type TallyImportInput = z.infer<typeof TallyImportInputSchema>;
 export type BillItemInput = z.infer<typeof BillItemInputSchema>;
+export type ManualBillInput = z.infer<typeof ManualBillInputSchema>;
+export type ManualBillItem = z.infer<typeof ManualBillItemSchema>;
 export type SupplierInviteInput = z.infer<typeof SupplierInviteInputSchema>;
 export type PricingRuleInput = z.infer<typeof PricingRuleInputSchema>;
+export type SupplierUpdateInput = z.infer<typeof SupplierUpdateInputSchema>;
 
 export function parseFormData<T extends z.ZodTypeAny>(
   formData: FormData,

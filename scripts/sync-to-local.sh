@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync latest features from GitHub clone into your local TallyBillPro folder (Downloads).
+# Sync latest from GitHub clone into your local Mahendra Distributors folder (Downloads).
 # Usage: ./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
 
 set -euo pipefail
@@ -26,20 +26,27 @@ RSYNC_EXCLUDES=(
   --exclude .env.local
 )
 
-rsync -av "${RSYNC_EXCLUDES[@]}" \
-  "$SOURCE/lib/" "$TARGET/lib/"
-rsync -av "${RSYNC_EXCLUDES[@]}" \
-  "$SOURCE/app/" "$TARGET/app/"
-rsync -av "${RSYNC_EXCLUDES[@]}" \
-  "$SOURCE/components/" "$TARGET/components/"
-rsync -av "${RSYNC_EXCLUDES[@]}" \
-  "$SOURCE/__tests__/" "$TARGET/__tests__/"
+for dir in lib app components __tests__ scripts supabase; do
+  if [ -d "$SOURCE/$dir" ]; then
+    rsync -av --delete "${RSYNC_EXCLUDES[@]}" "$SOURCE/$dir/" "$TARGET/$dir/"
+  fi
+done
 
-cp "$SOURCE/package.json" "$TARGET/package.json"
-cp "$SOURCE/package-lock.json" "$TARGET/package-lock.json" 2>/dev/null || true
-cp "$SOURCE/next.config.ts" "$TARGET/next.config.ts"
+for file in package.json package-lock.json next.config.ts tailwind.config.ts middleware.ts tsconfig.json postcss.config.mjs jest.config.js; do
+  if [ -f "$SOURCE/$file" ]; then
+    cp "$SOURCE/$file" "$TARGET/$file"
+  fi
+done
 
+if [ -f "$SOURCE/app/globals.css" ]; then
+  cp "$SOURCE/app/globals.css" "$TARGET/app/globals.css"
+fi
+
+echo ""
 echo "Done. In target folder run:"
 echo "  cd \"$TARGET\""
 echo "  npm install"
+echo "  npx supabase db reset    # required after migration sync"
+echo "  npm run check"
 echo "  npm run dev"
+echo "  → http://localhost:3001"
