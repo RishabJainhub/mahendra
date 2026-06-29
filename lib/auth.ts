@@ -8,7 +8,14 @@ export type AppUser = {
   supplier_id: string | null;
   must_reset_password: boolean;
   tenant?: { id: string; name: string; gstin?: string; address?: string };
-  supplier?: { id: string; name: string; email?: string };
+  supplier?: {
+    id: string;
+    name: string;
+    email?: string;
+    code_prefix?: string | null;
+    code_number?: string | null;
+    active?: boolean;
+  };
 };
 
 export async function getUser(): Promise<AppUser | null> {
@@ -23,7 +30,9 @@ export async function getUser(): Promise<AppUser | null> {
 
   const { data: profile } = await supabase
     .from('users')
-    .select('*, tenant:tenants(id, name, gstin, address), supplier:suppliers(id, name, email)')
+    .select(
+      '*, tenant:tenants(id, name, gstin, address), supplier:suppliers(id, name, email, code_prefix, code_number, active)'
+    )
     .eq('id', user.id)
     .single();
 
@@ -57,5 +66,8 @@ export async function requireSupplier(): Promise<AppUser> {
   const user = await requireUser();
   if (user.role !== 'supplier') throw new Error('Forbidden');
   if (!user.supplier_id) throw new Error('Supplier profile missing');
+  if (user.supplier?.active === false) {
+    throw new Error('Supplier account deactivated. Contact the administrator.');
+  }
   return user;
 }

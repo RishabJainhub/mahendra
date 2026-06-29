@@ -1,73 +1,93 @@
 'use client';
 
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import { getBill, markBillPrinted } from '@/app/actions/bills';
-import { renderBillPDF } from '@/lib/pdf';
+import { useEffect, useState } from 'react';
+import type { ReactElement } from 'react';
+import { useRouter } from 'next/navigation';
+import { getBillStickers, markBillPrinted } from '@/app/actions/bills';
+import { renderBillPDF, DEFAULT_LABEL_LAYOUT } from '@/lib/pdf';
 import { Button } from '@/components/ui/button';
-
-const PDFViewer = dynamic(
-  () => import('@react-pdf/renderer').then((mod) => mod.PDFViewer),
-  { ssr: false, loading: () => <p className="p-4">Loading preview...</p> }
-);
+import { PdfPrintTools } from '@/components/pdf/pdf-print-tools';
 
 type Props = {
-  bills: { id: string; bill_number: string; bill_date: string }[];
+  bills: { id: string; bill_number: string; bill_date: string; status?: string }[];
   layout: { grid_cols: number; label_w: number; label_h: number; include_fields: string[] } | null;
+  initialBillId?: string;
 };
 
-export function PrintPageClient({ bills, layout }: Props) {
-  const [billId, setBillId] = useState('');
-  const [pdfDoc, setPdfDoc] = useState<React.ReactElement | null>(null);
+export function PrintPageClient({ bills, layout, initialBillId }: Props) {
+  const router = useRouter();
+  const [billId, setBillId] = useState(initialBillId ?? '');
+  const [pdfDoc, setPdfDoc] = useState<ReactElement | null>(null);
+  const [fileName, setFileName] = useState('labels.pdf');
+  const [loading, setLoading] = useState(false);
+  const [marked, setMarked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handlePreview() {
+  const layoutConfig = layout ?? DEFAULT_LABEL_LAYOUT;
+
+  useEffect(() => {
+    if (initialBillId) setBillId(initialBillId);
+  }, [initialBillId]);
+
+  async function handleGenerate() {
     if (!billId) return;
-    const bill = await getBill(billId);
-    if (!bill) return;
+    setLoading(true);
+    setError(null);
+    setMarked(false);
+    setPdfDoc(null);
+    try {
+      const sticker = await getBillStickers(billId);
+      if (!sticker) {
+        setError('Could not load this bill.');
+        return;
+      }
+      const doc = renderBillPDF(sticker.bill, sticker.items, layoutConfig);
+      setPdfDoc(doc);
+      setFileName(`labels-${sticker.bill.bill_number}.pdf`);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-    const items = (bill.bill_items ?? []).map((item: { sku: string; name: string; qty: number; rate: number; total: number }) => ({
-      sku: item.sku,
-      name: item.name,
-      qty: Number(item.qty),
-      rate: Number(item.rate),
-      total: Number(item.total),
-      barcode_data: item.sku,
-    }));
-
-    const doc = renderBillPDF(
-      {
-        bill_number: bill.bill_number,
-        bill_date: bill.bill_date,
-        supplier_name: (bill.supplier as { name: string })?.name ?? '',
-        tenant_name: 'Mahendra Saree House',
-        total_amount: Number(bill.total_amount),
-      },
-      items,
-      layout ?? { grid_cols: 3, label_w: 120, label_h: 80, include_fields: ['sku', 'name', 'barcode'] }
-    );
-    setPdfDoc(doc);
-    await markBillPrinted(billId);
+  async function handleMarkPrinted() {
+    if (!billId) return;
+    const result = await markBillPrinted(billId);
+    if (result.ok) {
+      setMarked(true);
+      router.refresh();
+    } else {
+      setError(result.error);
+    }
   }
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">Print Barcodes</h1>
-      <div className="mb-4 flex gap-3">
-        <select value={billId} onChange={(e) => setBillId(e.target.value)} className="h-10 rounded-md border px-3 text-sm">
+      <h1 className="mb-6 text-2xl font-bold">Print Labels</h1>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <select
+          value={billId}
+          onChange={(e) => setBillId(e.target.value)}
+          className="h-10 rounded-md border px-3 text-sm"
+        >
           <option value="">Select bill</option>
           {bills.map((b) => (
-            <option key={b.id} value={b.id}>{b.bill_number} — {b.bill_date}</option>
+            <option key={b.id} value={b.id}>
+              {b.bill_number} — {b.bill_date}
+              {b.status === 'printed' ? ' (printed)' : ''}
+            </option>
           ))}
         </select>
-        <Button onClick={handlePreview}>Preview & Print</Button>
+        <Button onClick={() => void handleGenerate()} disabled={!billId || loading}>
+          {loading ? 'Generating…' : 'Generate PDF'}
+        </Button>
       </div>
-      {pdfDoc && (
-        <div className="h-[80vh] rounded-lg border">
-          <PDFViewer width="100%" height="100%" showToolbar>
-            {pdfDoc as never}
-          </PDFViewer>
-        </div>
-      )}
+      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+      <PdfPrintTools
+        doc={pdfDoc}
+        fileName={fileName}
+        onMarkPrinted={pdfDoc ? handleMarkPrinted : undefined}
+        marked={marked}
+      />
     </div>
   );
 }

@@ -1,79 +1,255 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
-import { formatINR } from '@/lib/pricing';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { formatINR, formatLabelPrice } from '@/lib/pricing';
+import {
+  chunkLabelsForPages,
+  computeLabelGrid,
+  expandBillLabels,
+  type ExpandedLabel,
+  type LabelGrid,
+} from '@/lib/pdf/layout';
+import type { BillItemPDF, BillPDFData, BillStickerBundle, LayoutPDF } from '@/lib/pdf/types';
 
-export type BillPDFData = {
-  bill_number: string;
-  bill_date: string;
-  supplier_name: string;
-  tenant_name: string;
-  tenant_gstin?: string;
-  total_amount: number;
+export type { BillPDFData, BillItemPDF, LayoutPDF, BillStickerBundle } from '@/lib/pdf/types';
+export { labelsPerPage, expandBillLabels, computeLabelGrid } from '@/lib/pdf/layout';
+
+/** Fallback layout when none is configured in the DB.
+ *  Matches the reference sticker: ~60mm × 25mm landscape, 4 centered lines. */
+export const DEFAULT_LABEL_LAYOUT: LayoutPDF = {
+  grid_cols: 3,
+  label_w: 170,
+  label_h: 68,
+  include_fields: [],
 };
 
-export type BillItemPDF = {
-  sku: string;
-  name: string;
-  qty: number;
-  rate: number;
-  total: number;
-  barcode_data?: string;
-};
+/** Argox CP-2140 label-roll dimensions in PDF points.
+ *  50mm × 25mm landscape sticker (2" × 1"), 1 label per page. */
+export const LABEL_ROLL_WIDTH_PT = 141.73; // 50mm
+export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm
 
-export type LayoutPDF = {
-  grid_cols: number;
-  label_w: number;
-  label_h: number;
-  include_fields: string[];
-};
+/** Minimum label height so 4 stacked lines never overlap, regardless of DB config. */
+const MIN_LABEL_HEIGHT = 64;
+
+const rollStyles = StyleSheet.create({
+  rollPage: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rollLine1: {
+    fontSize: 9,
+    fontFamily: 'Helvetica-Bold',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  rollLine2: {
+    fontSize: 8.5,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  rollLine3: {
+    fontSize: 11,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  rollLine4: {
+    fontSize: 11,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+  },
+});
 
 const styles = StyleSheet.create({
-  page: { padding: 30, fontSize: 10 },
-  header: { marginBottom: 20 },
-  title: { fontSize: 16, marginBottom: 4 },
+  page: { padding: 24, fontSize: 9 },
+  header: { marginBottom: 14 },
+  title: { fontSize: 14, marginBottom: 2 },
+  meta: { fontSize: 8, color: '#444' },
   row: { flexDirection: 'row', flexWrap: 'wrap' },
   label: {
-    border: '1pt solid #ccc',
-    padding: 4,
+    border: '0.5pt solid #000',
+    padding: 3,
     margin: 2,
-    width: 120,
-    minHeight: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  barcode: { width: 100, height: 30, marginBottom: 2 },
-  itemName: { fontSize: 8 },
-  itemSku: { fontSize: 7, color: '#666' },
+  line1: {
+    fontSize: 8,
+    fontFamily: 'Helvetica-Bold',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    marginBottom: 1,
+  },
+  line2: {
+    fontSize: 7.5,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+    marginBottom: 1,
+  },
+  line3: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+    marginBottom: 1,
+  },
+  line4: {
+    fontSize: 10,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'center',
+  },
 });
+
+function BillHeader({
+  bill,
+  totalLabels,
+  pageNote,
+}: {
+  bill: BillPDFData;
+  totalLabels: number;
+  pageNote?: string;
+}) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.title}>{bill.tenant_name}</Text>
+      {bill.tenant_gstin ? <Text style={styles.meta}>GSTIN: {bill.tenant_gstin}</Text> : null}
+      <Text style={styles.meta}>
+        Bill: {bill.bill_number} | Date: {bill.bill_date}
+      </Text>
+      <Text style={styles.meta}>
+        Supplier: {bill.supplier_name}
+        {bill.supplier_code ? ` (${bill.supplier_code})` : ''}
+      </Text>
+      <Text style={styles.meta}>
+        Total: {formatINR(bill.total_amount)} | Labels: {totalLabels}
+        {pageNote ? ` | ${pageNote}` : ''}
+      </Text>
+    </View>
+  );
+}
+
+function LabelCell({
+  label,
+  bill,
+  grid,
+}: {
+  label: ExpandedLabel;
+  bill: BillPDFData;
+  grid: LabelGrid;
+}) {
+  const companyCode = bill.supplier_code;
+  const itemHsn = label.item.hsn;
+  const line2 = companyCode && itemHsn
+    ? `${companyCode}(${itemHsn})`
+    : companyCode || itemHsn || '';
+  const safeHeight = Math.max(grid.labelHeight, MIN_LABEL_HEIGHT);
+  return (
+    <View
+      key={label.key}
+      style={[
+        styles.label,
+        { width: grid.labelWidth, minHeight: safeHeight },
+      ]}
+    >
+      <Text style={styles.line1}>{label.item.description}</Text>
+      {line2 ? <Text style={styles.line2}>{line2}</Text> : null}
+      <Text style={styles.line3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
+      <Text style={styles.line4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+    </View>
+  );
+}
+
+function renderBillPages(
+  bill: BillPDFData,
+  items: BillItemPDF[],
+  layout: LayoutPDF | null | undefined,
+  keyPrefix = ''
+): React.ReactElement[] {
+  const safeLayout = layout ?? DEFAULT_LABEL_LAYOUT;
+  const grid = computeLabelGrid(safeLayout);
+  const expanded = expandBillLabels(items);
+  const pageChunks = chunkLabelsForPages(expanded, grid, true);
+
+  return pageChunks.map((chunk, pageIdx) => (
+    <Page key={`${keyPrefix}p-${pageIdx}`} size="A4" style={styles.page}>
+      {pageIdx === 0 ? (
+        <BillHeader
+          bill={bill}
+          totalLabels={expanded.length}
+          pageNote={
+            pageChunks.length > 1
+              ? `Page ${pageIdx + 1} of ${pageChunks.length}`
+              : undefined
+          }
+        />
+      ) : (
+        <Text style={[styles.meta, { marginBottom: 8 }]}>
+          {bill.bill_number} — {bill.bill_date} — Page {pageIdx + 1} of {pageChunks.length}
+        </Text>
+      )}
+      <View style={styles.row}>
+        {chunk.map((label) => (
+          <LabelCell key={label.key} label={label} bill={bill} grid={grid} />
+        ))}
+      </View>
+    </Page>
+  ));
+}
 
 export function renderBillPDF(
   bill: BillPDFData,
   items: BillItemPDF[],
-  layout: LayoutPDF
+  layout: LayoutPDF | null | undefined
 ): React.ReactElement {
-  const labelWidth = layout.label_w || 120;
+  return <Document>{renderBillPages(bill, items, layout)}</Document>;
+}
+
+export function renderBulkBillPDF(
+  bundles: BillStickerBundle[],
+  layout: LayoutPDF | null | undefined
+): React.ReactElement {
+  const pages = bundles.flatMap((bundle, billIdx) =>
+    renderBillPages(bundle.bill, bundle.items, layout, `b${billIdx}-`)
+  );
+
+  return <Document>{pages}</Document>;
+}
+
+/** Render one label per PDF page, sized for a label-roll printer (Argox CP-2140).
+ *  Each page = one 25×50mm sticker, no borders, no header. */
+export function renderLabelRollPDF(
+  bundles: BillStickerBundle[]
+): React.ReactElement {
+  const allLabels = bundles.flatMap((bundle) =>
+    expandBillLabels(bundle.items).map((label) => ({
+      label,
+      bill: bundle.bill,
+      key: `${bundle.id ?? bundle.bill.bill_number}-${label.key}`,
+    }))
+  );
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{bill.tenant_name}</Text>
-          {bill.tenant_gstin && <Text>GSTIN: {bill.tenant_gstin}</Text>}
-          <Text>Bill: {bill.bill_number} | Date: {bill.bill_date}</Text>
-          <Text>Supplier: {bill.supplier_name}</Text>
-          <Text>Total: {formatINR(bill.total_amount)}</Text>
-        </View>
-        <View style={styles.row}>
-          {items.map((item, idx) => (
-            <View key={idx} style={[styles.label, { width: labelWidth }]}>
-              {item.barcode_data && (
-                <Image style={styles.barcode} src={`/api/bills/0/barcodes?data=${encodeURIComponent(item.barcode_data)}`} />
-              )}
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemSku}>{item.sku}</Text>
-              <Text>Qty: {item.qty} | {formatINR(item.rate)}</Text>
-            </View>
-          ))}
-        </View>
-      </Page>
+      {allLabels.map(({ label, bill, key }) => {
+        const companyCode = bill.supplier_code;
+        const itemHsn = label.item.hsn;
+        const line2 = companyCode && itemHsn
+          ? `${companyCode}(${itemHsn})`
+          : companyCode || itemHsn || '';
+        return (
+          <Page
+            key={key}
+            size={[LABEL_ROLL_WIDTH_PT, LABEL_ROLL_HEIGHT_PT]}
+            style={rollStyles.rollPage}
+          >
+            <Text style={rollStyles.rollLine1}>{label.item.description}</Text>
+            {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
+            <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
+            <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+          </Page>
+        );
+      })}
     </Document>
   );
 }

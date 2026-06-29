@@ -34,13 +34,7 @@ export async function getSupplierDashboard() {
       .eq('supplier_id', user.supplier_id!)
       .order('id', { ascending: false })
       .limit(1)
-      .single();
-
-    const { data: pricingRule } = await supabase
-      .from('pricing_rules')
-      .select('*')
-      .eq('supplier_id', user.supplier_id!)
-      .single();
+      .maybeSingle();
 
     const { data: imports } = await supabase
       .from('tally_imports')
@@ -54,7 +48,6 @@ export async function getSupplierDashboard() {
       totalBills: totalBills ?? 0,
       printedBills: printedBills ?? 0,
       lastImport,
-      pricingRule,
       imports: imports ?? [],
     };
   } catch (err) {
@@ -64,7 +57,6 @@ export async function getSupplierDashboard() {
       totalBills: 0,
       printedBills: 0,
       lastImport: null,
-      pricingRule: null,
       imports: [],
     };
   }

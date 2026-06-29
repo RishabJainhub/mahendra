@@ -1,47 +1,66 @@
 'use client';
 
+import { useState } from 'react';
 import { upsertPricingRule } from '@/app/actions/suppliers';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PricingRuleFields } from '@/components/pricing/pricing-rule-fields';
 
 type Rule = {
-  model: string;
-  margin_pct: number;
-  markup_pct: number;
+  ma_markup1_pct: number;
+  ma_markup2_pct: number;
+  dna_markup1_pct: number;
+  dna_markup2_pct: number;
   gst_pct: number;
 };
 
-export function PricingForm({ supplierId, supplierName, rule }: { supplierId: string; supplierName: string; rule?: Rule }) {
+export function PricingForm({
+  supplierId,
+  supplierName,
+  rule,
+}: {
+  supplierId: string;
+  supplierName: string;
+  rule?: Rule;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
   async function handleSubmit(formData: FormData) {
-    await upsertPricingRule(formData);
+    setLoading(true);
+    setMessage(null);
+    setError(null);
+    formData.set('supplier_id', supplierId);
+    const result = await upsertPricingRule(formData);
+    setLoading(false);
+    if (result.ok) {
+      setMessage('Formula saved. Re-import bills to apply changes to new line items.');
+    } else {
+      setError(result.error);
+    }
   }
 
   return (
-    <form action={handleSubmit} className="rounded-lg border p-4">
-      <h3 className="mb-3 font-medium">{supplierName}</h3>
-      <input type="hidden" name="supplier_id" value={supplierId} />
-      <div className="grid gap-3 md:grid-cols-4">
-        <div>
-          <label className="mb-1 block text-sm">Model</label>
-          <select name="model" defaultValue={rule?.model ?? 'company151'} className="h-10 w-full rounded-md border px-3 text-sm">
-            <option value="standard">Standard</option>
-            <option value="company151">Company 151</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm">Margin %</label>
-          <Input name="margin_pct" type="number" step="0.01" defaultValue={rule?.margin_pct ?? 0} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm">Markup %</label>
-          <Input name="markup_pct" type="number" step="0.01" defaultValue={rule?.markup_pct ?? 0} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm">GST %</label>
-          <Input name="gst_pct" type="number" step="0.01" defaultValue={rule?.gst_pct ?? 5} />
-        </div>
+    <form action={handleSubmit} className="rounded-xl border bg-card p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h3 className="font-semibold">{supplierName}</h3>
+        <Button type="submit" size="sm" disabled={loading}>
+          {loading ? 'Saving…' : 'Save Formula'}
+        </Button>
       </div>
-      <Button type="submit" className="mt-3" size="sm">Save</Button>
+
+      {message && <p className="mb-3 text-sm text-green-600">{message}</p>}
+      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+
+      <PricingRuleFields
+        defaultValues={{
+          ma_markup1_pct: Number(rule?.ma_markup1_pct) || 0,
+          ma_markup2_pct: Number(rule?.ma_markup2_pct) || 0,
+          dna_markup1_pct: Number(rule?.dna_markup1_pct) || 0,
+          dna_markup2_pct: Number(rule?.dna_markup2_pct) || 0,
+          gst_pct: Number(rule?.gst_pct) || 5,
+        }}
+      />
     </form>
   );
 }

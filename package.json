@@ -1,9 +1,14 @@
 {
-  "name": "mahendra-saree-house",
+  "name": "tally-bill-processor",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 3001",
+    "check": "node scripts/check-local.mjs",
+    "check:cloud": "node scripts/check-cloud.mjs",
+    "setup:cloud": "./scripts/setup-cloud.sh",
+    "finish:cloud": "./scripts/finish-cloud-env.sh",
+    "diagnose-login": "node scripts/diagnose-login.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

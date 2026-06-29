@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
+import { todayIst } from '@/lib/tally/dates';
 
 export type SupplierStat = {
   id: string;
@@ -19,6 +20,12 @@ export type MonthlyTrend = {
   totalInr: number;
 };
 
+export type MonthEndAlert = {
+  month: string;
+  billCount: number;
+  exported: boolean;
+};
+
 export type DashboardData = {
   kpis: {
     totalBills: number;
@@ -28,6 +35,7 @@ export type DashboardData = {
   };
   supplierStats: SupplierStat[];
   monthlyTrend: MonthlyTrend[];
+  monthEndAlert: MonthEndAlert;
 };
 
 function monthKey(d: Date): string {
@@ -65,11 +73,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     .select('*', { count: 'exact', head: true })
     .eq('active', true);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIst();
+  // Explicit +05:30 offset so Postgres interprets the boundary as IST, not UTC.
   const { count: billsToday } = await supabase
     .from('bills')
     .select('*', { count: 'exact', head: true })
-    .gte('created_at', `${today}T00:00:00`);
+    .gte('created_at', `${today}T00:00:00+05:30`);
 
   const { data: suppliers } = await supabase
     .from('suppliers')
@@ -120,6 +129,17 @@ export async function getDashboardData(): Promise<DashboardData> {
     totalInr: v.totalInr,
   }));
 
+  const currentMonth = monthKey(now);
+  const currentMonthBillCount = bills.filter(
+    (b) => monthKey(new Date(b.bill_date)) === currentMonth
+  ).length;
+
+  const { data: monthExport } = await supabase
+    .from('tenant_month_exports')
+    .select('month')
+    .eq('month', currentMonth)
+    .maybeSingle();
+
   return {
     kpis: {
       totalBills: totalBills ?? 0,
@@ -129,5 +149,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     supplierStats,
     monthlyTrend,
+    monthEndAlert: {
+      month: currentMonth,
+      billCount: currentMonthBillCount,
+      exported: Boolean(monthExport),
+    },
   };
 }

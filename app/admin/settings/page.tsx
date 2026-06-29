@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { revalidatePath } from 'next/cache';
+import { MonthEndPanel } from './month-end-panel';
 
 async function updateTenant(formData: FormData) {
   'use server';
@@ -39,6 +40,10 @@ export default async function AdminSettingsPage() {
         </div>
         <Button type="submit">Save</Button>
       </form>
+
+      <div className="mt-10">
+        <MonthEndPanel />
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { newRequestId } from '@/lib/logger';
 export async function writeAudit(
   action: string,
   entity: string,
-  entityId: string,
+  entityId: string | null,
   diff: Record<string, unknown> = {}
 ): Promise<void> {
   const reqId = newRequestId();
@@ -18,7 +18,7 @@ export async function writeAudit(
       actor_id: user.id,
       action,
       entity,
-      entity_id: entityId,
+      entity_id: entityId || null,
       diff,
     });
   } catch (err) {

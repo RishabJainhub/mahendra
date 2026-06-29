@@ -24,7 +24,13 @@ export async function upsertLayout(formData: FormData): Promise<ActionResult<{ i
   try {
     const admin = await requireAdmin();
     const id = formData.get('id') as string | null;
-    const includeFields = JSON.parse(String(formData.get('include_fields') ?? '[]'));
+    let includeFields: string[] = [];
+    try {
+      includeFields = JSON.parse(String(formData.get('include_fields') ?? '[]'));
+      if (!Array.isArray(includeFields)) includeFields = [];
+    } catch {
+      return fail('Fields JSON is malformed — enter a valid JSON array like ["sku","name"]');
+    }
     const payload = {
       name: String(formData.get('name') ?? ''),
       grid_cols: Number(formData.get('grid_cols') ?? 3),
