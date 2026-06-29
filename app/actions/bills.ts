@@ -6,7 +6,7 @@ import { requireAdmin, requireUser } from '@/lib/auth';
 import { ok, fail, fromZod, type ActionResult } from '@/lib/result';
 import { logger, newRequestId } from '@/lib/logger';
 import { writeAudit } from '@/lib/audit';
-import { TallyImportInputSchema } from '@/lib/validation';
+import { TallyImportInputSchema, ManualBillInputSchema } from '@/lib/validation';
 import { parseTallyXml } from '@/lib/tally/xml-parser';
 import { parseTallyXlsx } from '@/lib/tally/excel-parser';
 import { parseTallyPdf } from '@/lib/tally/pdf-parser';
@@ -64,7 +64,7 @@ export async function getBills(filters: BillFilters = {}) {
 export async function getBill(id: string) {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    await requireAdmin();
     const supabase = await createClient();
 
     const { data: bill, error } = await supabase
@@ -179,7 +179,7 @@ export async function getPrintableBills(filters: {
 } = {}): Promise<{ bills: PrintableBillRow[]; total: number }> {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    await requireAdmin();
     const supabase = await createClient();
     const all: PrintableBillRow[] = [];
     let offset = 0;
@@ -237,7 +237,7 @@ export async function getBulkBillStickers(
   if (billIds.length === 0) return [];
 
   try {
-    await requireUser();
+    await requireAdmin();
     const supabase = await createClient();
     const results: { id: string; bill: StickerBill; items: StickerItem[] }[] = [];
     const chunkSize = 25;
@@ -256,7 +256,7 @@ export async function getBulkBillStickers(
 
       if (error) {
         logger.error('getBulkBillStickers failed', { reqId, error: error.message });
-        continue;
+        throw new Error(`Could not load stickers for one or more bills: ${error.message}`);
       }
 
       const byId = new Map(
@@ -293,7 +293,7 @@ export async function getBulkBillStickers(
     return results;
   } catch (err) {
     logger.error('getBulkBillStickers error', { reqId, err });
-    return [];
+    throw err instanceof Error ? err : new Error('Could not load bill stickers');
   }
 }
 
@@ -601,6 +601,23 @@ export async function cancelBill(id: string): Promise<ActionResult<{ id: string 
     await requireAdmin();
     const supabase = await createClient();
 
+    const { data: existing, error: fetchErr } = await supabase
+      .from('bills')
+      .select('id, status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) {
+      logger.error('cancelBill fetch failed', { reqId, error: fetchErr.message });
+      return fail(fetchErr.message);
+    }
+    if (!existing) {
+      return fail('Bill not found');
+    }
+    if (existing.status === 'cancelled') {
+      return fail('Bill is already cancelled');
+    }
+
     const { error } = await supabase
       .from('bills')
       .update({ status: 'cancelled' })
@@ -625,6 +642,231 @@ export async function cancelBill(id: string): Promise<ActionResult<{ id: string 
 
 export async function cancelBillAction(id: string): Promise<void> {
   await cancelBill(id);
+}
+
+export type BillForEdit = {
+  id: string;
+  supplierId: string;
+  billNumber: string;
+  billDate: string;
+  items: {
+    id: string;
+    description: string;
+    hsn: string;
+    qty: number;
+    rate: number;
+  }[];
+};
+
+export async function getBillForEdit(id: string): Promise<BillForEdit | null> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    const { data: bill, error } = await supabase
+      .from('bills')
+      .select('id, supplier_id, bill_number, bill_date, bill_items(id, name, hsn, qty, rate)')
+      .eq('id', id)
+      .single();
+
+    if (error || !bill) {
+      logger.warn('getBillForEdit not found', { reqId, id, error: error?.message });
+      return null;
+    }
+
+    const items = (bill.bill_items ?? []) as {
+      id: string;
+      name: string;
+      hsn: string | null;
+      qty: number | string | null;
+      rate: number | string | null;
+    }[];
+
+    return {
+      id: bill.id,
+      supplierId: bill.supplier_id,
+      billNumber: bill.bill_number,
+      billDate: bill.bill_date,
+      items: items.map((i) => ({
+        id: i.id,
+        description: i.name,
+        hsn: i.hsn ?? '',
+        qty: Number(i.qty ?? 0),
+        rate: Number(i.rate ?? 0),
+      })),
+    };
+  } catch (err) {
+    logger.error('getBillForEdit error', { reqId, err });
+    return null;
+  }
+}
+
+export async function updateManualBill(input: {
+  billId: string;
+  billNumber: string;
+  billDate: string;
+  items: { description: string; hsn?: string; qty: number; rate: number }[];
+}): Promise<ActionResult<{ billId: string; itemCount: number }>> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    const parsed = ManualBillInputSchema.safeParse({
+      supplierId: '00000000-0000-0000-0000-000000000000',
+      billNumber: input.billNumber,
+      billDate: input.billDate,
+      items: input.items,
+    });
+    if (!parsed.success) return fromZod(parsed.error);
+
+    const { data: bill, error: billFetchErr } = await supabase
+      .from('bills')
+      .select('id, supplier_id, bill_number, status')
+      .eq('id', input.billId)
+      .single();
+
+    if (billFetchErr || !bill) {
+      logger.warn('updateManualBill not found', { reqId, id: input.billId });
+      return fail('Bill not found');
+    }
+
+    const newNumber = parsed.data.billNumber.trim();
+    if (bill.bill_number !== newNumber) {
+      const { data: dup } = await supabase
+        .from('bills')
+        .select('id')
+        .eq('supplier_id', bill.supplier_id)
+        .eq('bill_number', newNumber)
+        .neq('id', input.billId)
+        .maybeSingle();
+
+      if (dup) {
+        return fail(
+          `Bill ${newNumber} already exists for this supplier. Pick a different bill number.`,
+          'DUPLICATE_BILL',
+          { billNumber: newNumber }
+        );
+      }
+    }
+
+    const totalAmount = parsed.data.items.reduce((sum, i) => sum + i.qty * i.rate, 0);
+
+    // Preserve status — editing a line item must not reset a 'printed' bill
+    // back to 'imported' (which would re-queue it for bulk print). Only flip
+    // 'draft' → 'imported'; leave 'printed' / 'cancelled' as-is.
+    const nextStatus = bill.status === 'draft' ? 'imported' : bill.status;
+
+    const { error: billUpdErr } = await supabase
+      .from('bills')
+      .update({
+        bill_number: newNumber,
+        bill_date: parsed.data.billDate,
+        total_amount: totalAmount,
+        status: nextStatus,
+      })
+      .eq('id', input.billId);
+
+    if (billUpdErr) {
+      logger.error('updateManualBill bill update failed', { reqId, error: billUpdErr.message });
+      if (billUpdErr.code === '23505') {
+        return fail(
+          `Bill ${newNumber} already exists for this supplier.`,
+          'DUPLICATE_BILL',
+          { billNumber: newNumber }
+        );
+      }
+      return fail(billUpdErr.message);
+    }
+
+    const { error: itemsDeleteErr } = await supabase
+      .from('bill_items')
+      .delete()
+      .eq('bill_id', input.billId);
+
+    if (itemsDeleteErr) {
+      logger.error('updateManualBill items delete failed', { reqId, error: itemsDeleteErr.message });
+      return fail(itemsDeleteErr.message);
+    }
+
+    const billItems = parsed.data.items.map((item) => ({
+      bill_id: input.billId,
+      sku: item.description.slice(0, 40).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ITEM',
+      name: item.description,
+      hsn: item.hsn?.trim() || null,
+      qty: item.qty,
+      rate: item.rate,
+    }));
+
+    const { error: itemsInsertErr } = await supabase.from('bill_items').insert(billItems);
+    if (itemsInsertErr) {
+      logger.error('updateManualBill items insert failed', { reqId, error: itemsInsertErr.message });
+      return fail(itemsInsertErr.message);
+    }
+
+    await writeAudit('manual_edit', 'bill', input.billId, {
+      billNumber: newNumber,
+      itemCount: parsed.data.items.length,
+    });
+
+    logger.info('updateManualBill success', { reqId, billId: input.billId, itemCount: parsed.data.items.length });
+    revalidatePath('/admin/bills');
+    revalidatePath(`/admin/bills/${input.billId}`);
+
+    return ok({ billId: input.billId, itemCount: parsed.data.items.length });
+  } catch (err) {
+    logger.error('updateManualBill error', { reqId, err });
+    return fail('Bill update failed');
+  }
+}
+
+export async function deleteBill(id: string): Promise<ActionResult<{ id: string }>> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const supabase = await createClient();
+
+    const { data: bill, error: fetchErr } = await supabase
+      .from('bills')
+      .select('id, bill_number, supplier_id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchErr) {
+      logger.error('deleteBill fetch failed', { reqId, error: fetchErr.message });
+      return fail(fetchErr.message);
+    }
+    if (!bill) {
+      return fail('Bill not found');
+    }
+
+    const { error } = await supabase.from('bills').delete().eq('id', id);
+    if (error) {
+      logger.error('deleteBill failed', { reqId, error: error.message });
+      return fail(error.message);
+    }
+
+    await writeAudit('delete', 'bill', id, {
+      billNumber: bill.bill_number,
+      supplierId: bill.supplier_id,
+    });
+
+    logger.info('deleteBill success', { reqId, id });
+    revalidatePath('/admin/bills');
+    revalidatePath('/admin/print');
+    revalidatePath('/supplier');
+    revalidatePath('/supplier/history');
+
+    return ok({ id });
+  } catch (err) {
+    logger.error('deleteBill error', { reqId, err });
+    return fail('Delete failed');
+  }
+}
+
+export async function deleteBillAction(id: string): Promise<void> {
+  await deleteBill(id);
 }
 
 export async function markBillPrinted(id: string): Promise<ActionResult<{ id: string }>> {
@@ -653,6 +895,101 @@ export async function markBillPrinted(id: string): Promise<ActionResult<{ id: st
   } catch (err) {
     logger.error('markBillPrinted error', { reqId, err });
     return fail('Mark printed failed');
+  }
+}
+
+export async function createManualBill(input: {
+  supplierId: string;
+  billNumber: string;
+  billDate: string;
+  items: { description: string; hsn?: string; qty: number; rate: number }[];
+}): Promise<ActionResult<{ billId: string; itemCount: number }>> {
+  const reqId = newRequestId();
+  try {
+    const user = await requireUser();
+    const supplierId = user.role === 'admin' ? input.supplierId : user.supplier_id;
+    if (!supplierId) return fail('Supplier ID required', 'VALIDATION_ERROR');
+
+    const parsed = ManualBillInputSchema.safeParse({
+      supplierId,
+      billNumber: input.billNumber,
+      billDate: input.billDate,
+      items: input.items,
+    });
+    if (!parsed.success) return fromZod(parsed.error);
+
+    const supabase = await createClient();
+
+    const { data: existing } = await supabase
+      .from('bills')
+      .select('id')
+      .eq('supplier_id', supplierId)
+      .eq('bill_number', parsed.data.billNumber)
+      .maybeSingle();
+
+    if (existing) {
+      return fail(
+        `Bill ${parsed.data.billNumber} already exists for this supplier. Use a different bill number or delete the existing one first.`,
+        'DUPLICATE_BILL',
+        { existingBillId: existing.id, billNumber: parsed.data.billNumber }
+      );
+    }
+
+    const totalAmount = parsed.data.items.reduce((sum, i) => sum + i.qty * i.rate, 0);
+
+    const { data: bill, error: billError } = await supabase
+      .from('bills')
+      .insert({
+        supplier_id: supplierId,
+        bill_number: parsed.data.billNumber,
+        bill_date: parsed.data.billDate,
+        total_amount: totalAmount,
+        status: 'imported',
+      })
+      .select('id')
+      .single();
+
+    if (billError || !bill) {
+      logger.error('createManualBill bill insert failed', { reqId, error: billError?.message });
+      if (billError?.code === '23505') {
+        return fail(
+          `Bill ${parsed.data.billNumber} already exists for this supplier.`,
+          'DUPLICATE_BILL',
+          { billNumber: parsed.data.billNumber }
+        );
+      }
+      return fail(billError?.message ?? 'Failed to create bill');
+    }
+
+    const billItems = parsed.data.items.map((item) => ({
+      bill_id: bill.id,
+      sku: item.description.slice(0, 40).toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'ITEM',
+      name: item.description,
+      hsn: item.hsn?.trim() || null,
+      qty: item.qty,
+      rate: item.rate,
+    }));
+
+    const { error: itemsError } = await supabase.from('bill_items').insert(billItems);
+    if (itemsError) {
+      logger.error('createManualBill items insert failed', { reqId, error: itemsError.message });
+      await supabase.from('bills').delete().eq('id', bill.id);
+      return fail(itemsError.message);
+    }
+
+    await writeAudit('manual_import', 'bill', bill.id, {
+      billNumber: parsed.data.billNumber,
+      itemCount: parsed.data.items.length,
+    });
+
+    logger.info('createManualBill success', { reqId, billId: bill.id, itemCount: parsed.data.items.length });
+    revalidatePath('/admin/bills');
+    revalidatePath('/supplier');
+
+    return ok({ billId: bill.id, itemCount: parsed.data.items.length });
+  } catch (err) {
+    logger.error('createManualBill error', { reqId, err });
+    return fail('Manual bill creation failed');
   }
 }
 

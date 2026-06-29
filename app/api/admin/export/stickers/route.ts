@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getBulkBillStickers } from '@/app/actions/bills';
+import { createClient } from '@/lib/supabase/server';
 
 function csvField(value: string | number): string {
   const s = String(value ?? '');
@@ -16,6 +17,12 @@ function stickerLabel(prefix: string, value: number): string {
 }
 
 export async function GET(request: NextRequest) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || user.app_metadata?.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const billIds = request.nextUrl.searchParams.getAll('billId');
   if (billIds.length === 0) {
     return new Response('Missing billId parameter', { status: 400 });

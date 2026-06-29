@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireSupplier } from '@/lib/auth';
 import { getSupplierDashboard } from '@/app/actions/supplier';
-import { formatINR, describeFormula, formatSupplierCode } from '@/lib/pricing';
+import { formatINR, formatSupplierCode } from '@/lib/pricing';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
@@ -17,17 +17,7 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
 
 export default async function SupplierDashboardPage() {
   const user = await requireSupplier();
-  const { bills, totalBills, printedBills, lastImport, pricingRule, imports } = await getSupplierDashboard();
-
-  const formula = pricingRule
-    ? describeFormula({
-        ma_markup1_pct: Number(pricingRule.ma_markup1_pct) || 0,
-        ma_markup2_pct: Number(pricingRule.ma_markup2_pct) || 0,
-        dna_markup1_pct: Number(pricingRule.dna_markup1_pct) || 0,
-        dna_markup2_pct: Number(pricingRule.dna_markup2_pct) || 0,
-        gst_pct: Number(pricingRule.gst_pct) || 0,
-      })
-    : 'No formula assigned';
+  const { bills, totalBills, printedBills, lastImport, imports } = await getSupplierDashboard();
 
   const supplierCode = formatSupplierCode(user.supplier?.code_prefix, user.supplier?.code_number);
 
@@ -59,13 +49,6 @@ export default async function SupplierDashboardPage() {
           Print Barcodes
         </Link>
       </PageHeader>
-
-      {pricingRule && (
-        <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-          <span className="font-medium text-primary">Active formula: </span>
-          <span className="text-foreground">{formula}</span>
-        </div>
-      )}
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (

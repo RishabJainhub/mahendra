@@ -16,6 +16,27 @@ type Layout = {
 
 export function LayoutClient({ layouts }: { layouts: Layout[] }) {
   const [editing, setEditing] = useState<Layout | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Layout | null>(null);
+
+  async function handleSave(fd: FormData) {
+    setSaving(true);
+    setError(null);
+    const result = await upsertLayout(fd);
+    setSaving(false);
+    if (result.ok) {
+      setEditing(null);
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function handleDelete(layout: Layout) {
+    const result = await deleteLayout(layout.id);
+    if (!result.ok) setError(result.error);
+    setPendingDelete(null);
+  }
 
   return (
     <div>
@@ -42,7 +63,7 @@ export function LayoutClient({ layouts }: { layouts: Layout[] }) {
                 variant="outline"
                 className="cursor-pointer"
                 aria-label={`Edit ${layout.name}`}
-                onClick={() => setEditing(layout)}
+                onClick={() => { setEditing(layout); setError(null); }}
               >
                 Edit
               </Button>
@@ -52,7 +73,7 @@ export function LayoutClient({ layouts }: { layouts: Layout[] }) {
                 variant="destructive"
                 className="cursor-pointer"
                 aria-label={`Delete ${layout.name}`}
-                onClick={async () => { await deleteLayout(layout.id); }}
+                onClick={() => setPendingDelete(layout)}
               >
                 Delete
               </Button>
@@ -61,19 +82,39 @@ export function LayoutClient({ layouts }: { layouts: Layout[] }) {
         ))}
       </div>
 
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6">
+            <h2 className="mb-2 text-lg font-semibold">Delete layout?</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Delete <span className="font-medium">{pendingDelete.name}</span>? This can&apos;t be undone.
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="destructive" onClick={() => void handleDelete(pendingDelete)}>
+                Delete
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setPendingDelete(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="w-full max-w-md rounded-lg bg-white p-6">
             <h2 className="mb-4 text-lg font-semibold">{editing.id ? 'Edit Layout' : 'Add Layout'}</h2>
-            <form action={async (fd) => { await upsertLayout(fd); setEditing(null); }} className="space-y-3">
+            <form action={handleSave} className="space-y-3">
               {editing.id && <input type="hidden" name="id" value={editing.id} />}
               <Input name="name" placeholder="Name" defaultValue={editing.name} required />
               <Input name="grid_cols" type="number" placeholder="Grid Columns" defaultValue={editing.grid_cols} />
               <Input name="label_w" type="number" step="0.01" placeholder="Label Width (mm)" defaultValue={editing.label_w} />
               <Input name="label_h" type="number" step="0.01" placeholder="Label Height (mm)" defaultValue={editing.label_h} />
               <Input name="include_fields" placeholder='Fields JSON' defaultValue={JSON.stringify(editing.include_fields)} />
+              {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button type="submit">Save</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
                 <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
               </div>
             </form>

@@ -92,6 +92,8 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
       setPdfDoc(doc);
       setPdfFile(pdfFileName('labels', bundle.bill.bill_date, 1));
       setSelectedBulkIds([billId]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load this bill.');
     } finally {
       setLoadingPdf(false);
     }
@@ -127,6 +129,8 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
       setPdfDoc(doc);
       setPdfFile(pdfFileName('labels', filterDate, bundles.length));
       setSelectedBulkIds(bundles.map((b) => b.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load bills for bulk print.');
     } finally {
       setLoadingPdf(false);
       setProgress(null);

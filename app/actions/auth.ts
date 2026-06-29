@@ -12,12 +12,13 @@ async function resolveLoginRole(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   appMeta: Record<string, unknown>
-): Promise<{ role: 'admin' | 'supplier'; tenantId: string } | null> {
+): Promise<{ role: 'admin' | 'supplier'; tenantId: string; supplierId: string | null } | null> {
   let role = appMeta.role as 'admin' | 'supplier' | undefined;
   let tenantId = appMeta.tenant_id as string | undefined;
+  const supplierIdFromMeta = appMeta.supplier_id as string | undefined;
 
   if (role && tenantId) {
-    return { role, tenantId };
+    return { role, tenantId, supplierId: supplierIdFromMeta ?? null };
   }
 
   const service = createServiceClient();
@@ -48,10 +49,18 @@ async function resolveLoginRole(
   tenantId = refreshed?.app_metadata?.tenant_id as string | undefined;
 
   if (role && tenantId) {
-    return { role, tenantId };
+    return {
+      role,
+      tenantId,
+      supplierId: (refreshed?.app_metadata?.supplier_id as string) ?? profile.supplier_id ?? null,
+    };
   }
 
-  return { role: profile.role as 'admin' | 'supplier', tenantId: profile.tenant_id };
+  return {
+    role: profile.role as 'admin' | 'supplier',
+    tenantId: profile.tenant_id,
+    supplierId: profile.supplier_id ?? null,
+  };
 }
 
 export async function signIn(
@@ -90,6 +99,24 @@ export async function signIn(
     if (role !== 'admin' && role !== 'supplier') {
       await supabase.auth.signOut();
       return fail('Invalid account role. Contact an administrator.', 'INVALID_ROLE');
+    }
+
+    // Block deactivated supplier accounts at sign-in.
+    if (role === 'supplier') {
+      const service = createServiceClient();
+      const { data: supplierRow } = await service
+        .from('suppliers')
+        .select('active')
+        .eq('id', resolved.supplierId ?? '')
+        .maybeSingle();
+      if (supplierRow && supplierRow.active === false) {
+        await supabase.auth.signOut();
+        logger.warn('signIn blocked deactivated supplier', { reqId, userId: user.id });
+        return fail(
+          'Your supplier account has been deactivated. Contact the administrator.',
+          'ACCOUNT_DEACTIVATED'
+        );
+      }
     }
 
     logger.info('signIn success', { reqId, role });

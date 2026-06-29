@@ -1,5 +1,6 @@
 import type { TallyBill, TallyItem } from './xml-parser';
 import { extractHsnFromDescription } from './hsn';
+import { normalizeTallyDate } from './dates';
 
 export type ColumnMapping = Record<string, string>;
 
@@ -19,7 +20,8 @@ export function parseTallyXlsx(
 
   const first = rows[0];
   const billNumber = String(first[mapping.bill_number ?? 'Bill No'] ?? '');
-  const billDate = String(first[mapping.bill_date ?? 'Date'] ?? '');
+  const billDateRaw = String(first[mapping.bill_date ?? 'Date'] ?? '');
+  const billDate = normalizeTallyDate(billDateRaw);
   const party = String(first[mapping.party ?? 'Party'] ?? '');
 
   const items: TallyItem[] = rows.map((row) => {
