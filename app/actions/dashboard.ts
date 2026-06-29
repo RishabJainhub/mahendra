@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
+import { todayIst } from '@/lib/tally/dates';
 
 export type SupplierStat = {
   id: string;
@@ -72,11 +73,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     .select('*', { count: 'exact', head: true })
     .eq('active', true);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIst();
+  // Explicit +05:30 offset so Postgres interprets the boundary as IST, not UTC.
   const { count: billsToday } = await supabase
     .from('bills')
     .select('*', { count: 'exact', head: true })
-    .gte('created_at', `${today}T00:00:00`);
+    .gte('created_at', `${today}T00:00:00+05:30`);
 
   const { data: suppliers } = await supabase
     .from('suppliers')

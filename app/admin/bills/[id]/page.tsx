@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ReprintButton } from './reprint-button';
 import { RecomputeButton } from './recompute-button';
+import { DeleteBillButton } from './delete-button';
 import { requireAdmin } from '@/lib/auth';
 
 type Props = { params: Promise<{ id: string }> };
@@ -28,14 +29,18 @@ export default async function AdminBillDetailPage({ params }: Props) {
             {(bill.supplier as { name: string })?.name} · {bill.bill_date}
           </p>
         </div>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start justify-end gap-2">
+          <Link href={`/admin/bills/${id}/edit`}>
+            <Button type="button" variant="outline">Edit</Button>
+          </Link>
           <RecomputeButton billId={id} />
           <ReprintButton billId={id} />
           {bill.status !== 'cancelled' && (
             <form action={cancelBillAction.bind(null, id)}>
-              <Button type="submit" variant="destructive">Cancel</Button>
+              <Button type="submit" variant="outline">Cancel</Button>
             </form>
           )}
+          <DeleteBillButton billId={id} billNumber={bill.bill_number} redirectTo="/admin/bills" />
         </div>
       </div>
 

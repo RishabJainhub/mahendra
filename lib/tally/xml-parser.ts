@@ -157,7 +157,8 @@ export function parseTallyXml(xmlText: string): TallyParseResult {
 
   const v = voucher as Record<string, unknown>;
   const billNumber = getText(v.VOUCHERNUMBER ?? v.vouchernumber);
-  const billDate = getText(v.DATE ?? v.date);
+  const billDateRaw = getText(v.DATE ?? v.date);
+  const billDate = (require('./dates') as typeof import('./dates')).normalizeTallyDate(billDateRaw);
   const party = getText(v.PARTYNAME ?? v.partyname);
   const state = getText(v.STATENAME ?? v.statename) || undefined;
 
