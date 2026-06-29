@@ -1,4 +1,11 @@
-import { parseTallyXml, isInterstate } from '@/lib/tally/xml-parser';
+import { parseTallyXml, isInterstate, isCidEncodedXml, decodeCidEncodedXml } from '@/lib/tally/xml-parser';
+
+function toCidXml(text: string): string {
+  const segments = Array.from(text)
+    .map((ch) => `<segment>(cid:${ch.codePointAt(0) ?? 32})</segment>`)
+    .join('');
+  return `<?xml version='1.0' encoding='utf-8'?><root>${segments}</root>`;
+}
 
 const VALID_XML = `<?xml version="1.0"?>
 <ENVELOPE>
@@ -48,5 +55,39 @@ describe('xml-parser', () => {
     const remote = parseTallyXml(INTERSTATE_XML);
     expect(isInterstate(local.bill, 'Gujarat')).toBe(false);
     expect(isInterstate(remote.bill, 'Gujarat')).toBe(true);
+  });
+
+  it('detects CID-encoded XML', () => {
+    expect(isCidEncodedXml(toCidXml('TAX INVOICE'))).toBe(true);
+    expect(isCidEncodedXml(VALID_XML)).toBe(false);
+    expect(isCidEncodedXml('<segment>(cid:65)</segment>')).toBe(false);
+  });
+
+  it('decodes CID segments back to text', () => {
+    const cid = toCidXml('TAX INVOICE 1885');
+    expect(decodeCidEncodedXml(cid)).toContain('TAX INVOICE 1885');
+  });
+
+  it('parses CID-encoded XML through the PDF text parser', () => {
+    const pdfLikeText = [
+      'TAX INVOICE',
+      'Invoice No: 1885/26-27',
+      'Dated: 26-Jun-2026',
+      "Party's Name: Mahendra Distributors",
+      '1 Test Saree 5 PCS 200.00 1000.00',
+      'Grand Total: 1,000.00',
+    ].join('\n');
+    const result = parseTallyXml(toCidXml(pdfLikeText));
+    expect(result.bill.number).toBe('1885/26-27');
+    expect(result.items.length).toBeGreaterThanOrEqual(1);
+    expect(result.items[0].rate).toBe(200);
+  });
+
+  it('falls back to heuristic line-splitting when CID dump has no newlines', () => {
+    const flat = toCidXml(
+      'TAX INVOICE Invoice No: 1885/26-27 Dated: 26-Jun-2026 1 Test Saree 5 PCS 200.00 1000.00 Grand Total: 1,000.00'
+    );
+    const result = parseTallyXml(flat);
+    expect(result.bill.number).toBe('1885/26-27');
   });
 });

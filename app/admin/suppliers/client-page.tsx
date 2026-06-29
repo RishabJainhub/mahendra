@@ -16,13 +16,14 @@ import { Badge } from '@/components/ui/badge';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/layout/empty-state';
 import { PricingRuleFields } from '@/components/pricing/pricing-rule-fields';
-import { describeFormula, formatModelLabel, type PricingModel } from '@/lib/pricing';
+import { describeFormula, formatSupplierCode } from '@/lib/pricing';
 import { Label } from '@/components/ui/field';
 
 type PricingRule = {
-  model: PricingModel;
-  margin_pct: number;
-  markup_pct: number;
+  ma_markup1_pct: number;
+  ma_markup2_pct: number;
+  dna_markup1_pct: number;
+  dna_markup2_pct: number;
   gst_pct: number;
 };
 
@@ -32,6 +33,8 @@ type Supplier = {
   email: string | null;
   phone: string | null;
   active: boolean;
+  code_prefix: string | null;
+  code_number: string | null;
   pricing_rule?: PricingRule | null;
 };
 
@@ -74,6 +77,8 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
       name: String(formData.get('name') ?? ''),
       email: String(formData.get('email') ?? ''),
       phone: String(formData.get('phone') ?? '') || undefined,
+      code_prefix: String(formData.get('code_prefix') ?? '') || undefined,
+      code_number: String(formData.get('code_number') ?? '') || undefined,
     });
     setLoading(false);
     if (result.ok) {
@@ -168,6 +173,7 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
               <tr>
                 <th className="px-4 py-3 text-left font-medium">Supplier</th>
                 <th className="px-4 py-3 text-left font-medium">Contact</th>
+                <th className="px-4 py-3 text-left font-medium">Code</th>
                 <th className="px-4 py-3 text-left font-medium">Formula</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
@@ -181,19 +187,20 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                     <div className="text-xs text-muted-foreground">{s.email}</div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{s.phone || '—'}</td>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    {formatSupplierCode(s.code_prefix, s.code_number) || '—'}
+                  </td>
                   <td className="px-4 py-3">
                     {s.pricing_rule ? (
-                      <div>
-                        <Badge variant="secondary">{formatModelLabel(s.pricing_rule.model)}</Badge>
-                        <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                          {describeFormula({
-                            model: s.pricing_rule.model as PricingModel,
-                            margin_pct: s.pricing_rule.margin_pct,
-                            markup_pct: s.pricing_rule.markup_pct,
-                            gst_pct: s.pricing_rule.gst_pct,
-                          })}
-                        </p>
-                      </div>
+                      <p className="max-w-xs text-xs text-muted-foreground">
+                        {describeFormula({
+                          ma_markup1_pct: Number(s.pricing_rule.ma_markup1_pct) || 0,
+                          ma_markup2_pct: Number(s.pricing_rule.ma_markup2_pct) || 0,
+                          dna_markup1_pct: Number(s.pricing_rule.dna_markup1_pct) || 0,
+                          dna_markup2_pct: Number(s.pricing_rule.dna_markup2_pct) || 0,
+                          gst_pct: Number(s.pricing_rule.gst_pct) || 0,
+                        })}
+                      </p>
                     ) : (
                       <span className="text-muted-foreground">Not set</span>
                     )}
@@ -255,6 +262,18 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
               <Label htmlFor="invite-phone">Phone</Label>
               <Input id="invite-phone" name="phone" placeholder="Optional" />
             </div>
+            <div>
+              <Label htmlFor="invite-company-code">Company code</Label>
+              <Input
+                id="invite-company-code"
+                name="code_prefix"
+                placeholder="e.g. 000"
+                maxLength={16}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                A short code you assign to this supplier to avoid confusion. Appears on labels next to the line-item HSN.
+              </p>
+            </div>
             <PricingRuleFields />
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={loading}>{loading ? 'Inviting…' : 'Send Invite'}</Button>
@@ -279,6 +298,19 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
               <Label htmlFor="edit-phone">Phone</Label>
               <Input id="edit-phone" name="phone" defaultValue={editing.phone ?? ''} />
             </div>
+            <div>
+              <Label htmlFor="edit-company-code">Company code</Label>
+              <Input
+                id="edit-company-code"
+                name="code_prefix"
+                defaultValue={editing.code_prefix ?? ''}
+                maxLength={16}
+                placeholder="e.g. 000"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                A short code you assign to this supplier. Appears on labels next to the line-item HSN.
+              </p>
+            </div>
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={loading}>Save</Button>
               <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
@@ -292,10 +324,11 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
           <form action={handleFormulaSave} className="space-y-4">
             <PricingRuleFields
               defaultValues={{
-                model: (formulaTarget.pricing_rule?.model as 'standard' | 'company151') ?? 'company151',
-                margin_pct: formulaTarget.pricing_rule?.margin_pct ?? 0,
-                markup_pct: formulaTarget.pricing_rule?.markup_pct ?? 0,
-                gst_pct: formulaTarget.pricing_rule?.gst_pct ?? 5,
+                ma_markup1_pct: Number(formulaTarget.pricing_rule?.ma_markup1_pct) || 0,
+                ma_markup2_pct: Number(formulaTarget.pricing_rule?.ma_markup2_pct) || 0,
+                dna_markup1_pct: Number(formulaTarget.pricing_rule?.dna_markup1_pct) || 0,
+                dna_markup2_pct: Number(formulaTarget.pricing_rule?.dna_markup2_pct) || 0,
+                gst_pct: Number(formulaTarget.pricing_rule?.gst_pct) || 5,
               }}
             />
             <div className="flex gap-2 pt-2">

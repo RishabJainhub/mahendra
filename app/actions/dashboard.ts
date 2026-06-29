@@ -19,6 +19,12 @@ export type MonthlyTrend = {
   totalInr: number;
 };
 
+export type MonthEndAlert = {
+  month: string;
+  billCount: number;
+  exported: boolean;
+};
+
 export type DashboardData = {
   kpis: {
     totalBills: number;
@@ -28,6 +34,7 @@ export type DashboardData = {
   };
   supplierStats: SupplierStat[];
   monthlyTrend: MonthlyTrend[];
+  monthEndAlert: MonthEndAlert;
 };
 
 function monthKey(d: Date): string {
@@ -120,6 +127,17 @@ export async function getDashboardData(): Promise<DashboardData> {
     totalInr: v.totalInr,
   }));
 
+  const currentMonth = monthKey(now);
+  const currentMonthBillCount = bills.filter(
+    (b) => monthKey(new Date(b.bill_date)) === currentMonth
+  ).length;
+
+  const { data: monthExport } = await supabase
+    .from('tenant_month_exports')
+    .select('month')
+    .eq('month', currentMonth)
+    .maybeSingle();
+
   return {
     kpis: {
       totalBills: totalBills ?? 0,
@@ -129,5 +147,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     },
     supplierStats,
     monthlyTrend,
+    monthEndAlert: {
+      month: currentMonth,
+      billCount: currentMonthBillCount,
+      exported: Boolean(monthExport),
+    },
   };
 }

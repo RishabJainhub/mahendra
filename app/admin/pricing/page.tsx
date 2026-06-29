@@ -28,7 +28,7 @@ export default async function AdminPricingPage() {
         <EmptyState
           icon={<IndianRupee className="h-10 w-10" />}
           title="No suppliers to price"
-          description="Invite a supplier first, then assign their margin, markup, or Company 151 formula here."
+          description="Invite a supplier first, then assign their MA and DNA markups here."
         />
       ) : (
         <div className="space-y-5">

@@ -1,4 +1,4 @@
-import { calculateLine, calculateCompany151Line, formatINR } from '@/lib/pricing';
+import { calcMA, calcDNA, formatINR } from '@/lib/pricing';
 import { parseTallyXml } from '@/lib/tally/xml-parser';
 import { parseTallyPdfText } from '@/lib/tally/pdf-parser';
 import { generateBarcodePng } from '@/lib/barcode';
@@ -30,40 +30,48 @@ Grand Total : 1,000.00
 export function runPricingFormulaChecks(): HealthCheckResult[] {
   const results: HealthCheckResult[] = [];
 
-  const c151 = calculateCompany151Line(100);
+  const rule = {
+    ma_markup1_pct: 28,
+    ma_markup2_pct: 5,
+    dna_markup1_pct: 20,
+    dna_markup2_pct: 5,
+    gst_pct: 5,
+  };
+
+  const maPrice = calcMA(4000, rule);
   results.push({
-    id: 'pricing-company151',
+    id: 'pricing-ma-consecutive',
     category: 'pricing',
-    name: 'Company 151 multiplier (rate × 1.25)',
-    pass: Math.abs(c151 - 125) < 0.001,
-    expected: '125',
-    actual: String(c151),
+    name: 'MA consecutive markups (rate × 1.28 × 1.05)',
+    pass: Math.abs(maPrice - 5376) < 0.001,
+    expected: '5376',
+    actual: maPrice.toFixed(2),
   });
 
-  const margin = calculateLine(
-    { rate: 100, qty: 1 },
-    { model: 'standard', margin_pct: 10, markup_pct: 0, gst_pct: 0 }
-  );
+  const dnaPrice = calcDNA(4000, rule);
   results.push({
-    id: 'pricing-margin',
+    id: 'pricing-dna-consecutive',
     category: 'pricing',
-    name: 'Standard margin 10%',
-    pass: Math.abs(margin.unit_price - 110) < 0.001,
-    expected: '110',
-    actual: String(margin.unit_price),
+    name: 'DNA consecutive markups (rate × 1.20 × 1.05)',
+    pass: Math.abs(dnaPrice - 5040) < 0.001,
+    expected: '5040',
+    actual: dnaPrice.toFixed(2),
   });
 
-  const gst = calculateLine(
-    { rate: 100, qty: 1, is_interstate: true },
-    { model: 'standard', margin_pct: 0, markup_pct: 0, gst_pct: 18 }
-  );
+  const flat = calcMA(1000, {
+    ma_markup1_pct: 0,
+    ma_markup2_pct: 0,
+    dna_markup1_pct: 0,
+    dna_markup2_pct: 0,
+    gst_pct: 0,
+  });
   results.push({
-    id: 'pricing-igst',
+    id: 'pricing-flat',
     category: 'pricing',
-    name: 'IGST 18% interstate',
-    pass: Math.abs(gst.igst - 18) < 0.001,
-    expected: '18',
-    actual: String(gst.igst),
+    name: 'Zero markups pass rate through unchanged',
+    pass: Math.abs(flat - 1000) < 0.001,
+    expected: '1000',
+    actual: String(flat),
   });
 
   const inr = formatINR(1234.5);

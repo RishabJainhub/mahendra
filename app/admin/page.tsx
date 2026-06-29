@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { requireAdmin } from '@/lib/auth';
 import { getDashboardData } from '@/app/actions/dashboard';
 import { DashboardCharts } from './dashboard-charts';
+import { MonthEndBanner } from './month-end-banner';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 
 export default async function AdminDashboardPage() {
@@ -24,6 +25,7 @@ export default async function AdminDashboardPage() {
           Invite Supplier
         </Link>
       </PageHeader>
+      <MonthEndBanner alert={data.monthEndAlert} />
       <DashboardCharts data={data} />
     </PageShell>
   );

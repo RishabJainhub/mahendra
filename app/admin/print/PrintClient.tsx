@@ -1,61 +1,149 @@
 'use client';
 
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
-import { getBillStickers, markBillPrinted } from '@/app/actions/bills';
-import { renderBillPDF } from '@/lib/pdf';
+import {
+  getBulkBillStickers,
+  getPrintableBills,
+  markBillPrinted,
+  markBillsPrinted,
+  type PrintableBillRow,
+} from '@/app/actions/bills';
+import { renderBillPDF, renderBulkBillPDF, renderLabelRollPDF } from '@/lib/pdf';
+import type { LayoutPDF } from '@/lib/pdf/types';
+import { PdfPrintTools } from '@/components/pdf/pdf-print-tools';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
-const PDFViewer = dynamic(
-  () => import('@react-pdf/renderer').then((mod) => mod.PDFViewer),
-  { ssr: false, loading: () => <p className="p-4">Loading preview...</p> }
-);
+type LayoutOption = LayoutPDF & { id: string; name: string };
 
 type Props = {
-  bills: { id: string; bill_number: string; bill_date: string; supplier: { name: string } | null }[];
-  layouts: { id: string; name: string; grid_cols: number; label_w: number; label_h: number; include_fields: string[] }[];
+  layouts: LayoutOption[];
+  initialDate: string;
+  bulkPrintEnabled?: boolean;
 };
 
-export function PrintClient({ bills, layouts }: Props) {
+function pdfFileName(prefix: string, date: string, count: number): string {
+  return `${prefix}-${date}${count > 1 ? `-${count}-bills` : ''}.pdf`;
+}
+
+export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: Props) {
   const router = useRouter();
+  const [filterDate, setFilterDate] = useState(initialDate);
+  const [status, setStatus] = useState<'imported' | 'printed' | ''>('imported');
+  const [search, setSearch] = useState('');
   const [billId, setBillId] = useState('');
   const [layoutId, setLayoutId] = useState(layouts[0]?.id ?? '');
-  const [pdfDoc, setPdfDoc] = useState<React.ReactElement | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [bills, setBills] = useState<PrintableBillRow[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfDoc, setPdfDoc] = useState<ReactElement | null>(null);
+  const [pdfFile, setPdfFile] = useState('');
+  const [selectedBulkIds, setSelectedBulkIds] = useState<string[]>([]);
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [rollMode, setRollMode] = useState(false);
 
-  async function handlePreview() {
+  const layout = useMemo(
+    () => layouts.find((l) => l.id === layoutId) ?? layouts[0] ?? null,
+    [layouts, layoutId]
+  );
+
+  const loadBills = useCallback(async () => {
+    setLoadingList(true);
+    setError(null);
+    const result = await getPrintableBills({
+      status: status || undefined,
+      from: filterDate,
+      to: filterDate,
+      search: search.trim() || undefined,
+    });
+    setBills(result.bills);
+    setLoadingList(false);
+    if (result.bills.length === 1) setBillId(result.bills[0].id);
+  }, [filterDate, search, status]);
+
+  useEffect(() => {
+    void loadBills();
+  }, [loadBills]);
+
+  const unprintedToday = bills.filter((b) => b.status === 'imported');
+
+  async function handleSinglePdf() {
     if (!billId) return;
-    setLoading(true);
+    setLoadingPdf(true);
     setError(null);
     setMarked(false);
     setPdfDoc(null);
+    setSelectedBulkIds([]);
+    setProgress(null);
     try {
-      const sticker = await getBillStickers(billId);
-      if (!sticker) {
+      const bundles = await getBulkBillStickers([billId]);
+      if (bundles.length === 0) {
         setError('Could not load this bill.');
         return;
       }
-      const layout = layouts.find((l) => l.id === layoutId) ?? layouts[0];
-      const doc = renderBillPDF(
-        sticker.bill,
-        sticker.items,
-        layout ?? { grid_cols: 3, label_w: 120, label_h: 80, include_fields: [] }
-      );
+      const bundle = bundles[0];
+      const doc = rollMode
+        ? renderLabelRollPDF([{ id: billId, bill: bundle.bill, items: bundle.items }])
+        : renderBillPDF(bundle.bill, bundle.items, layout);
       setPdfDoc(doc);
+      setPdfFile(pdfFileName('labels', bundle.bill.bill_date, 1));
+      setSelectedBulkIds([billId]);
     } finally {
-      setLoading(false);
+      setLoadingPdf(false);
+    }
+  }
+
+  async function handleBulkPdf() {
+    const ids = unprintedToday.map((b) => b.id);
+    if (ids.length === 0) {
+      setError('No unprinted bills for this date.');
+      return;
+    }
+
+    setLoadingPdf(true);
+    setError(null);
+    setMarked(false);
+    setPdfDoc(null);
+    setProgress(`Loading 0 / ${ids.length} bills…`);
+
+    try {
+      const bundles = await getBulkBillStickers(ids);
+      if (bundles.length === 0) {
+        setError('Could not load bills for bulk print.');
+        return;
+      }
+
+      setProgress(`Building PDF for ${bundles.length} bills…`);
+      const doc = rollMode
+        ? renderLabelRollPDF(bundles.map((b) => ({ id: b.id, bill: b.bill, items: b.items })))
+        : renderBulkBillPDF(
+            bundles.map((b) => ({ id: b.id, bill: b.bill, items: b.items })),
+            layout
+          );
+      setPdfDoc(doc);
+      setPdfFile(pdfFileName('labels', filterDate, bundles.length));
+      setSelectedBulkIds(bundles.map((b) => b.id));
+    } finally {
+      setLoadingPdf(false);
+      setProgress(null);
     }
   }
 
   async function handleMarkPrinted() {
-    if (!billId) return;
-    const result = await markBillPrinted(billId);
+    if (selectedBulkIds.length === 0) return;
+    const result =
+      selectedBulkIds.length === 1
+        ? await markBillPrinted(selectedBulkIds[0])
+        : await markBillsPrinted(selectedBulkIds);
+
     if (result.ok) {
       setMarked(true);
       router.refresh();
+      await loadBills();
     } else {
       setError(result.error);
     }
@@ -63,34 +151,147 @@ export function PrintClient({ bills, layouts }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">Print Barcodes</h1>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <select value={billId} onChange={(e) => setBillId(e.target.value)} className="h-10 rounded-md border px-3 text-sm">
+      <h1 className="mb-2 text-2xl font-bold">Print Labels</h1>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Labels are paginated across A4 pages (~40–50 per page). Download PDF for reliable printing;
+        use bulk print for all unprinted bills on a date.
+      </p>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium">Bill date</label>
+          <Input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-40" />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as 'imported' | 'printed' | '')}
+            className="h-10 rounded-md border px-3 text-sm"
+          >
+            <option value="imported">Unprinted (imported)</option>
+            <option value="printed">Printed</option>
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Search bill #</label>
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Optional"
+            className="w-40"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">Layout</label>
+          <select
+            value={layoutId}
+            onChange={(e) => setLayoutId(e.target.value)}
+            className="h-10 rounded-md border px-3 text-sm"
+          >
+            {layouts.length === 0 ? (
+              <option value="">Default (2 col, 250×54)</option>
+            ) : (
+              layouts.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))
+            )}
+          </select>
+        </div>
+        <Button type="button" variant="outline" onClick={() => void loadBills()} disabled={loadingList}>
+          {loadingList ? 'Loading…' : 'Refresh list'}
+        </Button>
+      </div>
+
+      <div className="mb-4 flex items-center gap-3 rounded-md border bg-muted/30 p-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={rollMode}
+            onChange={(e) => setRollMode(e.target.checked)}
+            className="h-4 w-4"
+          />
+          Label roll mode (Argox CP-2140)
+        </label>
+        <span className="text-xs text-muted-foreground">
+          {rollMode
+            ? 'One 50×25mm sticker per page — print directly to the Argox.'
+            : 'A4 sheet with multiple labels — for preview or regular printers.'}
+        </span>
+      </div>
+
+      <p className="mb-4 text-sm text-muted-foreground">
+        {loadingList
+          ? 'Loading bills…'
+          : `${bills.length} bill(s) on ${filterDate}${status === 'imported' ? ` · ${unprintedToday.length} unprinted` : ''}`}
+      </p>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <select
+          value={billId}
+          onChange={(e) => setBillId(e.target.value)}
+          className="h-10 min-w-[220px] rounded-md border px-3 text-sm"
+        >
           <option value="">Select bill</option>
           {bills.map((b) => (
-            <option key={b.id} value={b.id}>{b.bill_number} — {b.bill_date}</option>
+            <option key={b.id} value={b.id}>
+              {b.bill_number} — {b.supplier_name} ({b.status})
+            </option>
           ))}
         </select>
-        <select value={layoutId} onChange={(e) => setLayoutId(e.target.value)} className="h-10 rounded-md border px-3 text-sm">
-          {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </select>
-        <Button onClick={handlePreview} disabled={!billId || loading}>
-          {loading ? 'Generating…' : 'Generate Preview'}
+        <Button type="button" onClick={() => void handleSinglePdf()} disabled={!billId || loadingPdf}>
+          {loadingPdf && !progress ? 'Generating…' : 'Single bill PDF'}
         </Button>
-        {pdfDoc && (
-          <Button variant="outline" onClick={handleMarkPrinted} disabled={marked}>
-            {marked ? 'Marked as Printed' : 'Mark as Printed'}
+        {bulkPrintEnabled && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleBulkPdf()}
+            disabled={loadingPdf || unprintedToday.length === 0}
+          >
+            {loadingPdf && progress ? progress : `Bulk: all unprinted (${unprintedToday.length})`}
           </Button>
         )}
       </div>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        {billId ? (
+          <a
+            href={`/api/admin/export/stickers?billId=${encodeURIComponent(billId)}`}
+            className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-accent"
+          >
+            Download CSV (BarTender)
+          </a>
+        ) : (
+          <Button type="button" variant="outline" disabled>
+            Download CSV (BarTender)
+          </Button>
+        )}
+        {bulkPrintEnabled && unprintedToday.length > 0 && (
+          <a
+            href={`/api/admin/export/stickers?${unprintedToday.map((b) => `billId=${encodeURIComponent(b.id)}`).join('&')}`}
+            className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-accent"
+          >
+            Download CSV — all unprinted ({unprintedToday.length})
+          </a>
+        )}
+        <span className="text-xs text-muted-foreground">
+          For BarTender / label software — one row per line item with Qty column.
+        </span>
+      </div>
+
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
-      {pdfDoc && (
-        <div className="h-[80vh] rounded-lg border">
-          <PDFViewer width="100%" height="100%" showToolbar>
-            {pdfDoc as never}
-          </PDFViewer>
-        </div>
-      )}
+
+      <PdfPrintTools
+        doc={pdfDoc}
+        fileName={pdfFile}
+        onMarkPrinted={selectedBulkIds.length > 0 ? handleMarkPrinted : undefined}
+        marked={marked}
+        markLabel={selectedBulkIds.length > 1 ? `Mark ${selectedBulkIds.length} as Printed` : 'Mark as Printed'}
+      />
     </div>
   );
 }

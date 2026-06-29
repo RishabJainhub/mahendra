@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { requireSupplier } from '@/lib/auth';
 import { getSupplierDashboard } from '@/app/actions/supplier';
-import { formatINR, formatModelLabel, describeFormula } from '@/lib/pricing';
+import { formatINR, describeFormula, formatSupplierCode } from '@/lib/pricing';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
@@ -21,12 +21,15 @@ export default async function SupplierDashboardPage() {
 
   const formula = pricingRule
     ? describeFormula({
-        model: pricingRule.model as 'standard' | 'company151',
-        margin_pct: Number(pricingRule.margin_pct),
-        markup_pct: Number(pricingRule.markup_pct),
-        gst_pct: Number(pricingRule.gst_pct),
+        ma_markup1_pct: Number(pricingRule.ma_markup1_pct) || 0,
+        ma_markup2_pct: Number(pricingRule.ma_markup2_pct) || 0,
+        dna_markup1_pct: Number(pricingRule.dna_markup1_pct) || 0,
+        dna_markup2_pct: Number(pricingRule.dna_markup2_pct) || 0,
+        gst_pct: Number(pricingRule.gst_pct) || 0,
       })
-    : 'Standard pricing';
+    : 'No formula assigned';
+
+  const supplierCode = formatSupplierCode(user.supplier?.code_prefix, user.supplier?.code_number);
 
   const kpis = [
     { label: 'Total Bills', value: String(totalBills) },
@@ -37,7 +40,7 @@ export default async function SupplierDashboardPage() {
         ? new Date(lastImport.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
         : '—',
     },
-    { label: 'Your Formula', value: pricingRule ? formatModelLabel(pricingRule.model) : '—' },
+    { label: 'Supplier Code', value: supplierCode || '—' },
   ];
 
   return (

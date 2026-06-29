@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { upsertPricingRule } from '@/app/actions/suppliers';
 import { Button } from '@/components/ui/button';
 import { PricingRuleFields } from '@/components/pricing/pricing-rule-fields';
-import type { PricingModel } from '@/lib/pricing';
 
 type Rule = {
-  model: string;
-  margin_pct: number;
-  markup_pct: number;
+  ma_markup1_pct: number;
+  ma_markup2_pct: number;
+  dna_markup1_pct: number;
+  dna_markup2_pct: number;
   gst_pct: number;
 };
 
@@ -54,10 +54,11 @@ export function PricingForm({
 
       <PricingRuleFields
         defaultValues={{
-          model: (rule?.model as PricingModel) ?? 'company151',
-          margin_pct: rule?.margin_pct ?? 0,
-          markup_pct: rule?.markup_pct ?? 0,
-          gst_pct: rule?.gst_pct ?? 5,
+          ma_markup1_pct: Number(rule?.ma_markup1_pct) || 0,
+          ma_markup2_pct: Number(rule?.ma_markup2_pct) || 0,
+          dna_markup1_pct: Number(rule?.dna_markup1_pct) || 0,
+          dna_markup2_pct: Number(rule?.dna_markup2_pct) || 0,
+          gst_pct: Number(rule?.gst_pct) || 5,
         }}
       />
     </form>
