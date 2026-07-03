@@ -1,16 +1,17 @@
-import Link from 'next/link';
 import { getBills } from '@/app/actions/bills';
 import { getSuppliers } from '@/app/actions/suppliers';
 import { formatINR } from '@/lib/pricing';
-import { Badge } from '@/components/ui/badge';
+import { PageHeader, PageShell } from '@/components/layout/page-header';
+import { ButtonLink } from '@/components/ui/button-link';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { EmptyState } from '@/components/layout/empty-state';
+import { BillStatusBadge } from '@/components/bills/bill-status-badge';
 import { DeleteBillButton } from './[id]/delete-button';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  draft: 'outline',
-  imported: 'secondary',
-  printed: 'default',
-  cancelled: 'destructive',
-};
+import { FileText, Filter, X, Receipt } from 'lucide-react';
+import Link from 'next/link';
 
 const PAGE_SIZE = 25;
 
@@ -42,73 +43,103 @@ export default async function AdminBillsPage({ searchParams }: Props) {
   });
   const suppliers = await getSuppliers();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasFilters = Boolean(params.status || params.supplier || params.from || params.to);
 
   return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Bills</h1>
+    <PageShell>
+      <PageHeader title="Bills" description="All bills across every supplier. Filter, review, or correct entries.">
+        <ButtonLink href="/admin/bills/manual" variant="outline">
+          <FileText className="mr-1.5 h-4 w-4" />
+          Manual entry
+        </ButtonLink>
+      </PageHeader>
 
-      <form className="mb-6 flex flex-wrap gap-3">
-        <select name="status" defaultValue={params.status ?? ''} className="h-10 rounded-md border px-3 text-sm">
-          <option value="">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="imported">Imported</option>
-          <option value="printed">Printed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-        <select name="supplier" defaultValue={params.supplier ?? ''} className="h-10 rounded-md border px-3 text-sm">
-          <option value="">All Suppliers</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
-        <input type="date" name="from" defaultValue={params.from ?? ''} className="h-10 rounded-md border px-3 text-sm" />
-        <input type="date" name="to" defaultValue={params.to ?? ''} className="h-10 rounded-md border px-3 text-sm" />
-        <button type="submit" className="h-10 rounded-md bg-primary px-4 text-sm text-primary-foreground">Filter</button>
+      <form className="mb-6 flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <label htmlFor="status" className="text-xs font-medium text-muted-foreground">Status</label>
+          <Select name="status" defaultValue={params.status ?? ''} className="w-44">
+            <option value="">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="imported">Imported</option>
+            <option value="printed">Printed</option>
+            <option value="cancelled">Cancelled</option>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="supplier" className="text-xs font-medium text-muted-foreground">Supplier</label>
+          <Select name="supplier" defaultValue={params.supplier ?? ''} className="w-48">
+            <option value="">All suppliers</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="from" className="text-xs font-medium text-muted-foreground">From</label>
+          <Input type="date" name="from" defaultValue={params.from ?? ''} className="w-40" />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="to" className="text-xs font-medium text-muted-foreground">To</label>
+          <Input type="date" name="to" defaultValue={params.to ?? ''} className="w-40" />
+        </div>
+        <Button type="submit">
+          <Filter className="mr-1.5 h-4 w-4" />
+          Filter
+        </Button>
+        {hasFilters && (
+          <ButtonLink href="/admin/bills" variant="ghost">
+            <X className="mr-1.5 h-4 w-4" />
+            Clear
+          </ButtonLink>
+        )}
       </form>
 
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="px-4 py-3 text-left">Bill #</th>
-              <th className="px-4 py-3 text-left">Date</th>
-              <th className="px-4 py-3 text-left">Supplier</th>
-              <th className="px-4 py-3 text-left">Total</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bills.map((bill) => (
-              <tr key={bill.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <Link href={`/admin/bills/${bill.id}`} className="text-primary hover:underline">
-                    {bill.bill_number}
-                  </Link>
-                </td>
-                <td className="px-4 py-3">{bill.bill_date}</td>
-                <td className="px-4 py-3">{(bill.supplier as { name: string })?.name}</td>
-                <td className="px-4 py-3">{formatINR(Number(bill.total_amount))}</td>
-                <td className="px-4 py-3">
-                  <Badge variant={STATUS_VARIANT[bill.status] ?? 'outline'}>{bill.status}</Badge>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DeleteBillButton
-                    billId={bill.id}
-                    billNumber={bill.bill_number}
-                    variant="ghost"
-                    label="Delete"
-                    className="h-8 px-2 text-destructive"
-                  />
-                </td>
-              </tr>
-            ))}
-            {bills.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No bills found</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {bills.length === 0 ? (
+        <EmptyState
+          icon={<Receipt className="h-10 w-10" />}
+          title="No bills found"
+          description={hasFilters ? 'Try adjusting or clearing the filters.' : 'Bills will appear here once a supplier imports or you enter one manually.'}
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Bill #</TH>
+                <TH>Date</TH>
+                <TH>Supplier</TH>
+                <TH align="right">Total</TH>
+                <TH>Status</TH>
+                <TH align="right">Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {bills.map((bill) => (
+                <TR key={bill.id}>
+                  <TD>
+                    <Link href={`/admin/bills/${bill.id}`} className="text-primary hover:underline">
+                      {bill.bill_number}
+                    </Link>
+                  </TD>
+                  <TD>{bill.bill_date}</TD>
+                  <TD>{(bill.supplier as { name: string })?.name}</TD>
+                  <TD align="right" className="tabular-nums">{formatINR(Number(bill.total_amount))}</TD>
+                  <TD><BillStatusBadge status={bill.status} /></TD>
+                  <TD align="right">
+                    <DeleteBillButton
+                      billId={bill.id}
+                      billNumber={bill.bill_number}
+                      variant="ghost"
+                      label="Delete"
+                      className="h-8 px-2 text-destructive"
+                    />
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+      )}
 
       {totalPages > 1 && (
         <div className="mt-4 flex items-center gap-2">
@@ -121,6 +152,6 @@ export default async function AdminBillsPage({ searchParams }: Props) {
           )}
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -1,12 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/pricing';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 import { arrayBufferToBase64 } from '@/lib/file-utils';
+import {
+  uploadTallyFileToStorage,
+  deleteTallyUploadFromClient,
+  TALLY_INLINE_MAX_BYTES,
+} from '@/lib/tally/upload';
 
 type DuplicateBill = {
   existingBillId: string;
@@ -29,21 +34,32 @@ function detectFileType(fileName: string): FileType {
   return 'xlsx';
 }
 
+type PreparedFile =
+  | { fileName: string; fileType: FileType; fileContent: string; mappingId?: string; storagePath?: string }
+  | { fileName: string; fileType: FileType; fileContent?: string; storagePath: string; mappingId?: string };
+
 export function ImportForm({ suppliers, mappings }: Props) {
   const [supplierId, setSupplierId] = useState('');
   const [mappingId, setMappingId] = useState(mappings[0]?.id ?? DEFAULT_TALLY_MAPPING_ID);
   const [preview, setPreview] = useState<{ sku: string; name: string; qty: number; rate: number }[] | null>(null);
   const [billMeta, setBillMeta] = useState<{ number: string; date: string; party: string; total: number } | null>(null);
-  const [fileData, setFileData] = useState<{
-    fileName: string;
-    fileType: FileType;
-    fileContent: string;
-    mappingId?: string;
-  } | null>(null);
+  const [fileData, setFileData] = useState<PreparedFile | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+
+  // Clean up any pending Storage upload when the component unmounts.
+  useEffect(() => {
+    return () => {
+      const pending = fileData;
+      if (pending && 'storagePath' in pending && pending.storagePath) {
+        void deleteTallyUploadFromClient(pending.storagePath);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -57,39 +73,59 @@ export function ImportForm({ suppliers, mappings }: Props) {
     setError(null);
     setDuplicate(null);
     setLoading(true);
+    setUploadProgress(null);
 
     const fileType = detectFileType(file.name);
     const effectiveMapping =
       fileType === 'pdf' || fileType === 'xml' ? undefined : mappingId;
 
     try {
-      let fileContent: string;
-      if (fileType === 'xml') {
-        fileContent = await file.text();
-      } else {
-        fileContent = arrayBufferToBase64(await file.arrayBuffer());
+      // Delete any previous pending upload so the bucket only ever holds the
+      // currently-previewed file.
+      const prev = fileData;
+      if (prev && 'storagePath' in prev && prev.storagePath) {
+        void deleteTallyUploadFromClient(prev.storagePath);
       }
 
-      const result = await previewTallyBill({
-        fileName: file.name,
-        fileType,
-        fileContent,
-        mappingId: effectiveMapping,
-      });
+      let prepared: PreparedFile;
+      if (file.size > TALLY_INLINE_MAX_BYTES) {
+        setUploadProgress(
+          `Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB to secure storage…`
+        );
+        const { path } = await uploadTallyFileToStorage(file);
+        setUploadProgress('Reading file…');
+        prepared = { fileName: file.name, fileType, storagePath: path, mappingId: effectiveMapping };
+      } else {
+        setUploadProgress('Reading file…');
+        const fileContent =
+          fileType === 'xml'
+            ? await file.text()
+            : arrayBufferToBase64(await file.arrayBuffer());
+        prepared = { fileName: file.name, fileType, fileContent, mappingId: effectiveMapping };
+      }
+
+      const result = await previewTallyBill(prepared);
 
       if (!result.ok) {
         setError(result.error);
         setPreview(null);
         setBillMeta(null);
+        if ('storagePath' in prepared && prepared.storagePath) {
+          void deleteTallyUploadFromClient(prepared.storagePath);
+        }
         setFileData(null);
         return;
       }
 
       setPreview(result.data.items);
       setBillMeta(result.data.bill);
-      setFileData({ fileName: file.name, fileType, fileContent, mappingId: effectiveMapping });
+      setFileData(prepared);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read this file.');
+      setFileData(null);
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -107,6 +143,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       );
       setPreview(null);
       setBillMeta(null);
+      // Server already deleted the storage object; clear local reference.
       setFileData(null);
       setDuplicate(null);
     } else if (result.code === 'DUPLICATE_BILL' && result.meta?.existingBillId) {
@@ -213,7 +250,9 @@ export function ImportForm({ suppliers, mappings }: Props) {
         />
       </div>
 
-      {loading && <p className="text-sm text-muted-foreground">Reading file…</p>}
+      {loading && (
+        <p className="text-sm text-muted-foreground">{uploadProgress ?? 'Reading file…'}</p>
+      )}
 
       {preview && billMeta && (
         <div>

@@ -11,7 +11,7 @@
     "diagnose-login": "node scripts/diagnose-login.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "tsc --noEmit",
     "test": "jest",
     "verify": "jest --testPathPattern=\"(health-check|pricing|pdf-parser|xml-parser)\"",
     "e2e": "playwright test",

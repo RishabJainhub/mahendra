@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 
 export type AppUser = {
   id: string;
@@ -52,22 +53,22 @@ export async function getUser(): Promise<AppUser | null> {
 
 export async function requireUser(): Promise<AppUser> {
   const user = await getUser();
-  if (!user) throw new Error('Unauthorized');
+  if (!user) redirect('/login');
   return user;
 }
 
 export async function requireAdmin(): Promise<AppUser> {
   const user = await requireUser();
-  if (user.role !== 'admin') throw new Error('Forbidden');
+  if (user.role !== 'admin') redirect('/login');
   return user;
 }
 
 export async function requireSupplier(): Promise<AppUser> {
   const user = await requireUser();
-  if (user.role !== 'supplier') throw new Error('Forbidden');
-  if (!user.supplier_id) throw new Error('Supplier profile missing');
+  if (user.role !== 'supplier') redirect('/login');
+  if (!user.supplier_id) redirect('/login');
   if (user.supplier?.active === false) {
-    throw new Error('Supplier account deactivated. Contact the administrator.');
+    redirect('/login');
   }
   return user;
 }

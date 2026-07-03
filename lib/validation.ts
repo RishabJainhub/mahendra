@@ -1,13 +1,35 @@
 import { z } from 'zod';
 
-export const MAX_IMPORT_CONTENT_CHARS = 15_000_000;
+/**
+ * Inline (server-action body) ceiling. Vercel caps serverless request bodies
+ * at 4.5 MB on every plan; staying under 2 MB leaves headroom for base64
+ * expansion and the JSON envelope. Larger files go through Supabase Storage
+ * and are referenced by `storagePath`.
+ */
+export const MAX_IMPORT_CONTENT_CHARS = 2_000_000;
 
+/**
+ * Tally import payload. Small files (≤ MAX_IMPORT_CONTENT_CHARS) are sent
+ * inline as `fileContent`; larger files are uploaded to the `tally-imports`
+ * Storage bucket and referenced by `storagePath`. Exactly one of the two is
+ * required.
+ */
 export const TallyImportInputSchema = z
   .object({
     fileName: z.string().min(1).max(255),
     fileType: z.enum(['xml', 'xlsx', 'xls', 'pdf']),
-    fileContent: z.string().min(1).max(MAX_IMPORT_CONTENT_CHARS, 'File content too large'),
+    fileContent: z.string().min(1).max(MAX_IMPORT_CONTENT_CHARS).optional(),
+    storagePath: z
+      .string()
+      .min(1)
+      .max(500)
+      .regex(/^[a-zA-Z0-9-]+\/[a-zA-Z0-9._-]+$/, 'Invalid storage path')
+      .optional(),
     mappingId: z.string().uuid().optional(),
+  })
+  .refine((d) => Boolean(d.fileContent) !== Boolean(d.storagePath), {
+    message: 'Provide exactly one of fileContent or storagePath',
+    path: ['fileContent'],
   })
   .refine((d) => d.fileType === 'pdf' || d.fileType === 'xml' || d.mappingId, {
     message: 'Column mapping is required for Excel imports',

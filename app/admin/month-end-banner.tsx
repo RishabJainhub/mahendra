@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import type { MonthEndAlert } from '@/app/actions/dashboard';
+import { ButtonLink } from '@/components/ui/button-link';
+import { CalendarClock, Download } from 'lucide-react';
 
 type Props = {
   alert: MonthEndAlert;
@@ -26,7 +27,8 @@ export function MonthEndBanner({ alert }: Props) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="font-medium text-foreground">
+          <p className="flex items-center gap-1.5 font-medium text-foreground">
+            <CalendarClock className="h-4 w-4" />
             {monthLabel}: {alert.billCount.toLocaleString('en-IN')} bills in the app
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -35,12 +37,21 @@ export function MonthEndBanner({ alert }: Props) {
               : `Export to Excel before month-end — ${alert.billCount.toLocaleString('en-IN')} bills should be archived before clearing.`}
           </p>
         </div>
-        <Link
+        <ButtonLink
           href="/admin/settings"
-          className="inline-flex h-9 shrink-0 items-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-accent"
+          variant="outline"
+          size="sm"
+          className="shrink-0"
         >
-          {exported ? 'Month-end settings' : 'Export now'}
-        </Link>
+          {exported ? (
+            'Month-end settings'
+          ) : (
+            <>
+              <Download className="mr-1.5 h-4 w-4" />
+              Export now
+            </>
+          )}
+        </ButtonLink>
       </div>
     </div>
   );

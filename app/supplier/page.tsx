@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { requireSupplier } from '@/lib/auth';
 import { getSupplierDashboard } from '@/app/actions/supplier';
 import { formatINR, formatSupplierCode } from '@/lib/pricing';
@@ -6,14 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/layout/empty-state';
-import { FileInput, Receipt } from 'lucide-react';
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  draft: 'outline',
-  imported: 'secondary',
-  printed: 'default',
-  cancelled: 'destructive',
-};
+import { ButtonLink } from '@/components/ui/button-link';
+import { BillStatusBadge } from '@/components/bills/bill-status-badge';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { FileInput, Receipt, Printer, Clock, Tag, FileText } from 'lucide-react';
 
 export default async function SupplierDashboardPage() {
   const user = await requireSupplier();
@@ -22,45 +17,50 @@ export default async function SupplierDashboardPage() {
   const supplierCode = formatSupplierCode(user.supplier?.code_prefix, user.supplier?.code_number);
 
   const kpis = [
-    { label: 'Total Bills', value: String(totalBills) },
-    { label: 'Stickers Printed', value: String(printedBills) },
+    { label: 'Total Bills', value: String(totalBills), icon: Receipt },
+    { label: 'Stickers Printed', value: String(printedBills), icon: Printer },
     {
       label: 'Last Import',
       value: lastImport?.created_at
         ? new Date(lastImport.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
         : '—',
+      icon: Clock,
     },
-    { label: 'Supplier Code', value: supplierCode || '—' },
+    { label: 'Supplier Code', value: supplierCode || '—', icon: Tag },
   ];
 
   return (
     <PageShell>
       <PageHeader title={`Welcome, ${user.supplier?.name}`} description="Your Tally bill import and barcode printing hub.">
-        <Link
-          href="/supplier/import"
-          className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
+        <ButtonLink href="/supplier/import" variant="default">
+          <FileInput className="mr-1.5 h-4 w-4" />
           Import Tally Bill
-        </Link>
-        <Link
-          href="/supplier/print"
-          className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-accent"
-        >
+        </ButtonLink>
+        <ButtonLink href="/supplier/print" variant="outline">
+          <Printer className="mr-1.5 h-4 w-4" />
           Print Barcodes
-        </Link>
+        </ButtonLink>
+        <ButtonLink href="/supplier/bills/manual" variant="outline">
+          <FileText className="mr-1.5 h-4 w-4" />
+          Manual Entry
+        </ButtonLink>
       </PageHeader>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <Card key={kpi.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{kpi.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpi.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+        {kpis.map((kpi) => {
+          const Icon = kpi.icon;
+          return (
+            <Card key={kpi.label}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">{kpi.label}</CardTitle>
+                <Icon className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{kpi.value}</div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <h2 className="mb-3 text-lg font-semibold">Recent Bills</h2>
@@ -72,34 +72,36 @@ export default async function SupplierDashboardPage() {
         />
       ) : (
         <div className="mb-8 overflow-hidden rounded-xl border bg-card shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-3 text-left">Bill #</th>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-4 py-3 text-right">Total</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-right"></th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Bill #</TH>
+                <TH>Date</TH>
+                <TH align="right">Total</TH>
+                <TH>Status</TH>
+                <TH align="right">Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
               {bills.map((bill) => (
-                <tr key={bill.id} className="border-t hover:bg-muted/20">
-                  <td className="px-4 py-3 font-medium">{bill.bill_number}</td>
-                  <td className="px-4 py-3">{bill.bill_date}</td>
-                  <td className="px-4 py-3 text-right">{formatINR(Number(bill.total_amount))}</td>
-                  <td className="px-4 py-3">
-                    <Badge variant={STATUS_VARIANT[bill.status] ?? 'outline'}>{bill.status}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link href={`/supplier/print?billId=${bill.id}`} className="text-primary hover:underline">
+                <TR key={bill.id}>
+                  <TD className="font-medium">
+                    <a href={`/supplier/bills/${bill.id}`} className="text-primary hover:underline">
+                      {bill.bill_number}
+                    </a>
+                  </TD>
+                  <TD>{bill.bill_date}</TD>
+                  <TD align="right">{formatINR(Number(bill.total_amount))}</TD>
+                  <TD><BillStatusBadge status={bill.status} /></TD>
+                  <TD align="right">
+                    <ButtonLink href={`/supplier/print?billId=${bill.id}`} variant="ghost" size="sm">
                       Print
-                    </Link>
-                  </td>
-                </tr>
+                    </ButtonLink>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         </div>
       )}
 

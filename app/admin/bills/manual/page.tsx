@@ -13,7 +13,10 @@ export default async function ManualBillPage() {
         title="Manual bill entry"
         description="Type in a physical bill's items by hand. MA/DNA prices are computed automatically on save."
       />
-      <ManualBillForm suppliers={suppliers} />
+      <ManualBillForm
+        suppliers={suppliers}
+        billDetailBase="/admin/bills/"
+      />
     </PageShell>
   );
 }
