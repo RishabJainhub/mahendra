@@ -22,45 +22,60 @@ export const DEFAULT_LABEL_LAYOUT: LayoutPDF = {
   include_fields: [],
 };
 
-/** Argox CP-2140 label-roll dimensions in PDF points.
- *  50mm × 25mm landscape sticker (2" × 1"), 1 label per page. */
-export const LABEL_ROLL_WIDTH_PT = 141.73; // 50mm
-export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm
-
-/** Minimum label height so 4 stacked lines never overlap, regardless of DB config. */
-const MIN_LABEL_HEIGHT = 64;
+/** Argox CP-2140 roll labels — physical media: 50mm wide × 25mm tall (landscape on roll).
+ *  PDF page MUST match the physical label exactly so the printer feeds one label
+ *  per page with no skipping. Windows/Argox driver should be set to Landscape,
+ *  media size 50×25mm, auto-rotate OFF. */
+export const LABEL_ROLL_WIDTH_PT = 141.73; // 50mm (print-head width)
+export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm (feed direction)
 
 const rollStyles = StyleSheet.create({
   rollPage: {
-    padding: 4,
+    flex: 1,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rollContent: {
+    // Wrapper View that actually performs the centering inside the Page.
+    flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
   rollLine1: {
-    fontSize: 9,
+    // Item description — biggest line, wraps if long.
+    fontSize: 14,
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   rollLine2: {
-    fontSize: 8.5,
+    // Supplier code (HSN) — secondary line.
+    fontSize: 11,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   rollLine3: {
-    fontSize: 11,
+    // MA price — prominent.
+    fontSize: 16,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   rollLine4: {
-    fontSize: 11,
+    // DNA price — prominent.
+    fontSize: 16,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
   },
 });
+
+/** Minimum label height so 4 stacked lines never overlap on A4 sheets. */
+const MIN_LABEL_HEIGHT = 64;
 
 const styles = StyleSheet.create({
   page: { padding: 24, fontSize: 9 },
@@ -216,8 +231,7 @@ export function renderBulkBillPDF(
   return <Document>{pages}</Document>;
 }
 
-/** Render one label per PDF page, sized for a label-roll printer (Argox CP-2140).
- *  Each page = one 25×50mm sticker, no borders, no header. */
+/** Render one label per PDF page, sized for Argox CP-2140 roll (50×25mm on media). */
 export function renderLabelRollPDF(
   bundles: BillStickerBundle[]
 ): React.ReactElement {
@@ -243,10 +257,12 @@ export function renderLabelRollPDF(
             size={[LABEL_ROLL_WIDTH_PT, LABEL_ROLL_HEIGHT_PT]}
             style={rollStyles.rollPage}
           >
-            <Text style={rollStyles.rollLine1}>{label.item.description}</Text>
-            {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
-            <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
-            <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+            <View style={rollStyles.rollContent}>
+              <Text style={rollStyles.rollLine1}>{label.item.description}</Text>
+              {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
+              <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
+              <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+            </View>
           </Page>
         );
       })}

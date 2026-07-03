@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { Users, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
 import {
   inviteSupplier,
@@ -14,6 +13,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ButtonLink } from '@/components/ui/button-link';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/layout/empty-state';
 import { PricingRuleFields } from '@/components/pricing/pricing-rule-fields';
@@ -186,29 +187,29 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         />
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/60">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Supplier</th>
-                <th className="px-4 py-3 text-left font-medium">Contact</th>
-                <th className="px-4 py-3 text-left font-medium">Code</th>
-                <th className="px-4 py-3 text-left font-medium">Formula</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Supplier</TH>
+                <TH>Contact</TH>
+                <TH>Code</TH>
+                <TH>Formula</TH>
+                <TH>Status</TH>
+                <TH align="right">Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
               {suppliers.map((s) => (
-                <tr key={s.id} className="border-t hover:bg-muted/20">
-                  <td className="px-4 py-3">
+                <TR key={s.id}>
+                  <TD>
                     <div className="font-medium">{s.name}</div>
                     <div className="text-xs text-muted-foreground">{s.email}</div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.phone || '—'}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
+                  </TD>
+                  <TD className="text-muted-foreground">{s.phone || '—'}</TD>
+                  <TD className="font-mono text-xs">
                     {formatSupplierCode(s.code_prefix, s.code_number) || '—'}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TD>
+                  <TD>
                     {s.pricing_rule ? (
                       <p className="max-w-xs text-xs text-muted-foreground">
                         {describeFormula({
@@ -222,13 +223,13 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                     ) : (
                       <span className="text-muted-foreground">Not set</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                  </TD>
+                  <TD>
                     <Badge variant={s.active ? 'default' : 'destructive'}>
                       {s.active ? 'Active' : 'Inactive'}
                     </Badge>
-                  </td>
-                  <td className="px-4 py-3">
+                  </TD>
+                  <TD>
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="outline" onClick={() => { setFormulaTarget(s); setError(null); }}>
                         Formula
@@ -236,18 +237,12 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                       <Button size="sm" variant="outline" onClick={() => { setEditing(s); setError(null); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Link
-                        href={`/admin/suppliers/${s.id}`}
-                        className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                      >
+                      <ButtonLink href={`/admin/suppliers/${s.id}`} variant="default" size="sm">
                         Dashboard
-                      </Link>
-                      <Link
-                        href={`/admin/bills?supplier=${s.id}`}
-                        className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium hover:bg-accent"
-                      >
+                      </ButtonLink>
+                      <ButtonLink href={`/admin/bills?supplier=${s.id}`} variant="outline" size="sm">
                         Bills
-                      </Link>
+                      </ButtonLink>
                       <Button
                         size="sm"
                         variant="outline"
@@ -266,11 +261,11 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TD>
+                </TR>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         </div>
       )}
 

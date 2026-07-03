@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button-link';
 
 type Props = {
   icon?: React.ReactNode;
@@ -17,6 +18,7 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  actionHref,
   className,
 }: Props) {
   return (
@@ -33,6 +35,11 @@ export function EmptyState({
         <Button className="mt-4" onClick={onAction}>
           {actionLabel}
         </Button>
+      )}
+      {actionLabel && actionHref && !onAction && (
+        <ButtonLink href={actionHref} className="mt-4">
+          {actionLabel}
+        </ButtonLink>
       )}
     </div>
   );

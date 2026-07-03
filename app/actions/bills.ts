@@ -11,6 +11,7 @@ import { parseTallyXml } from '@/lib/tally/xml-parser';
 import { parseTallyXlsx } from '@/lib/tally/excel-parser';
 import { parseTallyPdf } from '@/lib/tally/pdf-parser';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
+import { fetchTallyUpload, deleteTallyUpload } from '@/lib/tally/storage';
 import { APP_NAME } from '@/lib/brand';
 import { calcMA, calcDNA } from '@/lib/pricing';
 import { extractHsnFromDescription } from '@/lib/tally/hsn';
@@ -89,6 +90,30 @@ export async function getBill(id: string) {
     return { ...bill, audit: audit ?? [] };
   } catch (err) {
     logger.error('getBill error', { reqId, err });
+    return null;
+  }
+}
+
+export async function getSupplierBill(id: string) {
+  const reqId = newRequestId();
+  try {
+    await requireUser();
+    const supabase = await createClient();
+
+    const { data: bill, error } = await supabase
+      .from('bills')
+      .select('*, supplier:suppliers(name), bill_items(*, item:items(sku, name))')
+      .eq('id', id)
+      .single();
+
+    if (error || !bill) {
+      logger.warn('getSupplierBill not found', { reqId, id });
+      return null;
+    }
+
+    return bill;
+  } catch (err) {
+    logger.error('getSupplierBill error', { reqId, err });
     return null;
   }
 }
@@ -324,7 +349,7 @@ export async function markBillsPrinted(billIds: string[]): Promise<ActionResult<
     revalidatePath('/admin/bills');
     revalidatePath('/admin/print');
     revalidatePath('/supplier');
-    revalidatePath('/supplier/history');
+    revalidatePath('/supplier/bills');
     logger.info('markBillsPrinted success', { reqId, count });
     return ok({ count });
   } catch (err) {
@@ -389,7 +414,8 @@ export async function getBillStickers(
 export async function previewTallyBill(input: {
   fileName: string;
   fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
-  fileContent: string;
+  fileContent?: string;
+  storagePath?: string;
   mappingId?: string;
 }): Promise<
   ActionResult<{
@@ -403,6 +429,11 @@ export async function previewTallyBill(input: {
     const parsed = TallyImportInputSchema.safeParse(input);
     if (!parsed.success) return fromZod(parsed.error);
 
+    // NOTE: do NOT delete the storage object here. The form retains
+    // `storagePath` and re-passes it to `importTallyBill` when the user
+    // confirms. The object is deleted by the import action (after parse) or
+    // by the form (on cancel/replace), and the daily pg_cron job sweeps any
+    // orphans.
     const result = await parseTallyImport(parsed.data);
     return ok({
       bill: {
@@ -424,17 +455,56 @@ export async function previewTallyBill(input: {
   }
 }
 
+type ResolvedImport = {
+  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  text?: string;
+  buffer?: Buffer;
+};
+
+/**
+ * Materialize the file bytes from either an inline `fileContent` payload or a
+ * Storage `storagePath`. Throws on missing/invalid input so callers can
+ * surface a clean error.
+ */
+async function resolveTallyBytes(parsed: {
+  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileContent?: string;
+  storagePath?: string;
+}): Promise<ResolvedImport> {
+  if (parsed.storagePath) {
+    const { buffer } = await fetchTallyUpload(parsed.storagePath);
+    if (parsed.fileType === 'xml') {
+      return { fileType: parsed.fileType, text: buffer.toString('utf-8'), buffer };
+    }
+    return { fileType: parsed.fileType, buffer };
+  }
+  if (!parsed.fileContent) {
+    throw new Error('No file content provided');
+  }
+  if (parsed.fileType === 'xml') {
+    return { fileType: parsed.fileType, text: parsed.fileContent };
+  }
+  return {
+    fileType: parsed.fileType,
+    buffer: Buffer.from(parsed.fileContent, 'base64'),
+  };
+}
+
 async function parseTallyImport(parsed: {
   fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
-  fileContent: string;
+  fileContent?: string;
+  storagePath?: string;
   mappingId?: string;
 }) {
-  if (parsed.fileType === 'xml') {
-    return parseTallyXml(parsed.fileContent);
+  const resolved = await resolveTallyBytes(parsed);
+  if (resolved.fileType === 'xml' && resolved.text) {
+    return parseTallyXml(resolved.text);
   }
-  if (parsed.fileType === 'pdf') {
-    const buffer = Buffer.from(parsed.fileContent, 'base64');
-    return parseTallyPdf(buffer);
+  if (resolved.fileType === 'pdf' && resolved.buffer) {
+    return parseTallyPdf(resolved.buffer);
+  }
+  if (!resolved.buffer) {
+    throw new Error('Could not read file contents');
   }
   const supabase = await createClient();
   const mappingId = parsed.mappingId ?? DEFAULT_TALLY_MAPPING_ID;
@@ -444,25 +514,28 @@ async function parseTallyImport(parsed: {
     .eq('id', mappingId)
     .single();
   if (!mapping) throw new Error('Column mapping not found');
-  const buffer = Buffer.from(parsed.fileContent, 'base64');
-  return parseTallyXlsx(buffer, mapping.column_map as Record<string, string>);
+  return parseTallyXlsx(resolved.buffer, mapping.column_map as Record<string, string>);
 }
 
 export async function importTallyBill(
   input: {
     fileName: string;
     fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
-    fileContent: string;
+    fileContent?: string;
+    storagePath?: string;
     mappingId?: string;
     supplierId?: string;
     replaceExisting?: boolean;
   }
 ): Promise<ActionResult<{ billId: string; itemCount: number; replaced?: boolean }>> {
   const reqId = newRequestId();
+  let storagePath: string | undefined;
   try {
     const user = await requireUser();
     const parsed = TallyImportInputSchema.safeParse(input);
     if (!parsed.success) return fromZod(parsed.error);
+
+    storagePath = parsed.data.storagePath;
 
     const supplierId =
       user.role === 'admin' ? input.supplierId ?? user.supplier_id : user.supplier_id;
@@ -471,6 +544,7 @@ export async function importTallyBill(
     const parsedBill = await parseTallyImport({
       fileType: parsed.data.fileType,
       fileContent: parsed.data.fileContent,
+      storagePath: parsed.data.storagePath,
       mappingId: parsed.data.mappingId,
     });
     const billData = parsedBill.bill;
@@ -586,12 +660,17 @@ export async function importTallyBill(
     });
     revalidatePath('/admin/bills');
     revalidatePath('/supplier');
-    revalidatePath('/supplier/history');
+    revalidatePath('/supplier/bills');
 
     return ok({ billId: bill.id, itemCount: items.length, replaced: Boolean(existing) });
   } catch (err) {
     logger.error('importTallyBill error', { reqId, err });
     return fail('Import failed');
+  } finally {
+    // Free the Storage object whether the import succeeded, failed, or hit a
+    // duplicate. Orphan sweeps (pg_cron) are a safety net, not the primary
+    // path.
+    if (storagePath) await deleteTallyUpload(storagePath);
   }
 }
 
@@ -824,7 +903,7 @@ export async function updateManualBill(input: {
 export async function deleteBill(id: string): Promise<ActionResult<{ id: string }>> {
   const reqId = newRequestId();
   try {
-    await requireAdmin();
+    const user = await requireUser();
     const supabase = await createClient();
 
     const { data: bill, error: fetchErr } = await supabase
@@ -839,6 +918,9 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
     }
     if (!bill) {
       return fail('Bill not found');
+    }
+    if (user.role === 'supplier' && bill.supplier_id !== user.supplier_id) {
+      return fail('Not authorized to delete this bill');
     }
 
     const { error } = await supabase.from('bills').delete().eq('id', id);
@@ -856,7 +938,8 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
     revalidatePath('/admin/bills');
     revalidatePath('/admin/print');
     revalidatePath('/supplier');
-    revalidatePath('/supplier/history');
+    revalidatePath('/supplier/bills');
+    revalidatePath('/supplier/print');
 
     return ok({ id });
   } catch (err) {
@@ -889,7 +972,7 @@ export async function markBillPrinted(id: string): Promise<ActionResult<{ id: st
     logger.info('markBillPrinted success', { reqId, id });
     revalidatePath('/admin/bills');
     revalidatePath('/supplier');
-    revalidatePath('/supplier/history');
+    revalidatePath('/supplier/bills');
 
     return ok({ id });
   } catch (err) {
@@ -985,6 +1068,7 @@ export async function createManualBill(input: {
     logger.info('createManualBill success', { reqId, billId: bill.id, itemCount: parsed.data.items.length });
     revalidatePath('/admin/bills');
     revalidatePath('/supplier');
+    revalidatePath('/supplier/bills');
 
     return ok({ billId: bill.id, itemCount: parsed.data.items.length });
   } catch (err) {

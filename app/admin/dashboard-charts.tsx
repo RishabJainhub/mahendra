@@ -13,8 +13,11 @@ import {
   Legend,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { EmptyState } from '@/components/layout/empty-state';
 import { formatINR } from '@/lib/pricing';
 import type { DashboardData } from '@/app/actions/dashboard';
+import { Receipt, IndianRupee, Users, CalendarDays, BarChart3 } from 'lucide-react';
 
 type Props = {
   data: DashboardData;
@@ -40,41 +43,29 @@ export function DashboardCharts({ data }: Props) {
     value: m.totalInr,
   }));
 
+  const kpis = [
+    { label: 'Total bills', value: String(data.kpis.totalBills), icon: <Receipt className="h-4 w-4" /> },
+    { label: 'Total value', value: formatINR(data.kpis.totalValue), icon: <IndianRupee className="h-4 w-4" /> },
+    { label: 'Active suppliers', value: String(data.kpis.activeSuppliers), icon: <Users className="h-4 w-4" /> },
+    { label: 'Bills today', value: String(data.kpis.billsToday), icon: <CalendarDays className="h-4 w-4" /> },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Bills</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.kpis.totalBills}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Value</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatINR(data.kpis.totalValue)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Suppliers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.kpis.activeSuppliers}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Bills Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.kpis.billsToday}</div>
-          </CardContent>
-        </Card>
+        {kpis.map((kpi) => (
+          <Card key={kpi.label}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="text-muted-foreground">{kpi.icon}</span>
+                {kpi.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tabular-nums">{kpi.value}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -84,7 +75,12 @@ export function DashboardCharts({ data }: Props) {
           </CardHeader>
           <CardContent className="h-72">
             {chartSuppliers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No supplier bill data yet.</p>
+              <EmptyState
+                icon={<BarChart3 className="h-8 w-8" />}
+                title="No supplier data yet"
+                description="Bill totals per supplier will chart here once imports begin."
+                className="py-8"
+              />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartSuppliers} margin={{ left: 8, right: 8 }}>
@@ -105,7 +101,12 @@ export function DashboardCharts({ data }: Props) {
           </CardHeader>
           <CardContent className="h-72">
             {chartSuppliers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No import frequency data yet.</p>
+              <EmptyState
+                icon={<BarChart3 className="h-8 w-8" />}
+                title="No import data yet"
+                description="Import frequency will chart here as suppliers upload Tally bills."
+                className="py-8"
+              />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartSuppliers} margin={{ left: 8, right: 8 }}>
@@ -150,39 +151,41 @@ export function DashboardCharts({ data }: Props) {
           <CardTitle className="text-base">Supplier statistics</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="px-3 py-2 text-left">Supplier</th>
-                  <th className="px-3 py-2 text-right">Bills</th>
-                  <th className="px-3 py-2 text-right">Total (INR)</th>
-                  <th className="px-3 py-2 text-left">Last bill</th>
-                  <th className="px-3 py-2 text-right">Avg days between</th>
-                  <th className="px-3 py-2 text-right">Imports/month</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.supplierStats.map((s) => (
-                  <tr key={s.id} className="border-t">
-                    <td className="px-3 py-2 font-medium">{s.name}</td>
-                    <td className="px-3 py-2 text-right">{s.billCount}</td>
-                    <td className="px-3 py-2 text-right">{formatINR(s.totalInr)}</td>
-                    <td className="px-3 py-2">{s.lastBillDate ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">{s.avgDaysBetweenImports ?? '—'}</td>
-                    <td className="px-3 py-2 text-right">{s.importsPerMonth}</td>
-                  </tr>
-                ))}
-                {data.supplierStats.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                      No suppliers yet — invite one from Suppliers.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {data.supplierStats.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No suppliers yet"
+              description="Invite a supplier from Suppliers to start seeing statistics here."
+              className="py-8"
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Supplier</TH>
+                    <TH align="right">Bills</TH>
+                    <TH align="right">Total (INR)</TH>
+                    <TH>Last bill</TH>
+                    <TH align="right">Avg days between</TH>
+                    <TH align="right">Imports/month</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {data.supplierStats.map((s) => (
+                    <TR key={s.id}>
+                      <TD className="font-medium">{s.name}</TD>
+                      <TD align="right" className="tabular-nums">{s.billCount}</TD>
+                      <TD align="right" className="tabular-nums">{formatINR(s.totalInr)}</TD>
+                      <TD className="text-muted-foreground">{s.lastBillDate ?? '—'}</TD>
+                      <TD align="right" className="tabular-nums">{s.avgDaysBetweenImports ?? '—'}</TD>
+                      <TD align="right" className="tabular-nums">{s.importsPerMonth}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

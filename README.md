@@ -94,6 +94,8 @@ npm run dev
 
 When you deploy (e.g. Vercel), add the same three env vars there and update Site URL to your production domain.
 
+See **[DEPLOY.md](./DEPLOY.md)** for the full Vercel checklist (env vars, Supabase auth URLs, smoke test).
+
 ---
 
 Run the diagnostic first:

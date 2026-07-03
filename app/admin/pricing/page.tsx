@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { IndianRupee } from 'lucide-react';
 import { getPricingRules, getSuppliers } from '@/app/actions/suppliers';
 import { PricingForm } from './pricing-form';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
+import { ButtonLink } from '@/components/ui/button-link';
 import { EmptyState } from '@/components/layout/empty-state';
 
 export default async function AdminPricingPage() {
@@ -13,15 +13,12 @@ export default async function AdminPricingPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Pricing Formulas"
+        title="Pricing formulas"
         description="Each supplier gets a formula that converts Tally rates into sticker prices on import."
       >
-        <Link
-          href="/admin/suppliers"
-          className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-accent"
-        >
-          Manage Suppliers
-        </Link>
+        <ButtonLink href="/admin/suppliers" variant="outline">
+          Manage suppliers
+        </ButtonLink>
       </PageHeader>
 
       {suppliers.length === 0 ? (
