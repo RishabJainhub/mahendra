@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans, DM_Sans } from 'next/font/google';
 import { SupabaseListener } from '@/components/supabase-listener';
+import { NetworkErrorHandler } from '@/components/network-error-handler';
 import { ToastProvider } from '@/components/ui/toast';
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/brand';
 import { getSiteUrl } from '@/lib/site-url';
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${sans.variable} ${display.variable}`}>
       <body className="font-sans">
         <ToastProvider>
+          <NetworkErrorHandler />
           <SupabaseListener />
           {children}
         </ToastProvider>
