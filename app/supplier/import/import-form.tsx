@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
+import { getSupplierDefaultImportFormat, saveSupplierDefaultImportFormat } from '@/app/actions/supplier-defaults';
 import { Button } from '@/components/ui/button';
 import { ButtonLink } from '@/components/ui/button-link';
 import { Input } from '@/components/ui/input';
@@ -26,10 +27,11 @@ type DuplicateBill = {
   supplierName: string;
 };
 
-type FileType = 'xml' | 'xlsx' | 'xls' | 'pdf';
+type FileType = 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
 
 type Props = {
   mappings: { id: string; name: string }[];
+  supplierId: string;
 };
 
 type PreviewItem = { sku: string; name: string; qty: number; rate: number };
@@ -38,6 +40,7 @@ function detectFileType(fileName: string): FileType {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.xml')) return 'xml';
   if (lower.endsWith('.pdf')) return 'pdf';
+  if (lower.endsWith('.csv')) return 'csv';
   if (lower.endsWith('.xls')) return 'xls';
   return 'xlsx';
 }
@@ -46,7 +49,7 @@ type PreparedFile =
   | { fileName: string; fileType: FileType; fileContent: string; mappingId?: string; storagePath?: string }
   | { fileName: string; fileType: FileType; fileContent?: string; storagePath: string; mappingId?: string };
 
-export function ImportForm({ mappings }: Props) {
+export function ImportForm({ mappings, supplierId }: Props) {
   const [preview, setPreview] = useState<PreviewItem[] | null>(null);
   const [billMeta, setBillMeta] = useState<{ number: string; date: string; party: string; total: number } | null>(null);
   const [fileData, setFileData] = useState<PreparedFile | null>(null);
@@ -55,6 +58,22 @@ export function ImportForm({ mappings }: Props) {
   const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [saveAsDefault, setSaveAsDefault] = useState(true);
+
+  // Load this supplier's saved default import format on mount.
+  useEffect(() => {
+    if (!supplierId) return;
+    let cancelled = false;
+    (async () => {
+      const result = await getSupplierDefaultImportFormat(supplierId);
+      if (cancelled || !result.ok || !result.data) return;
+      if (result.data.mapping_id) {
+        const el = document.getElementById('mapping_id') as HTMLSelectElement | null;
+        if (el) el.value = result.data.mapping_id;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [supplierId]);
 
   // Clean up any pending Storage upload when the component unmounts.
   useEffect(() => {
@@ -147,9 +166,18 @@ export function ImportForm({ mappings }: Props) {
           ? `Replaced existing bill — imported ${result.data.itemCount} items`
           : `Imported ${result.data.itemCount} items successfully`
       );
+      if (saveAsDefault && supplierId) {
+        const saveResult = await saveSupplierDefaultImportFormat({
+          supplierId,
+          fileType: fileData.fileType,
+          mappingId: fileData.mappingId ?? '',
+        });
+        if (saveResult.ok) {
+          setMessage((prev) => `${prev} · Saved as your default ${fileData.fileType.toUpperCase()} format`);
+        }
+      }
       setPreview(null);
       setBillMeta(null);
-      // Server already deleted the storage object; clear local reference.
       setFileData(null);
       setDuplicate(null);
     } else if (result.code === 'DUPLICATE_BILL' && result.meta?.existingBillId) {
@@ -172,7 +200,7 @@ export function ImportForm({ mappings }: Props) {
     void runImport(true);
   }
 
-  const showMapping = !fileData || fileData.fileType === 'xlsx' || fileData.fileType === 'xls';
+  const showMapping = !fileData || fileData.fileType === 'xlsx' || fileData.fileType === 'xls' || fileData.fileType === 'csv';
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -243,11 +271,11 @@ export function ImportForm({ mappings }: Props) {
             <input
               id="tally_file"
               type="file"
-              accept=".xml,.xlsx,.xls,.pdf,application/pdf"
+              accept=".xml,.xlsx,.xls,.csv,.pdf,application/pdf,text/csv"
               onChange={handleFileChange}
               className="block w-full text-sm text-slate-950 file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
             />
-            <p className="text-xs text-muted-foreground">PDF, XML, or Excel (.xlsx / .xls). Files up to 50 MB are uploaded to secure storage.</p>
+            <p className="text-xs text-muted-foreground">PDF, XML, Excel (.xlsx / .xls), or CSV. Files up to 50 MB are uploaded to secure storage.</p>
           </div>
           {loading && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -304,6 +332,15 @@ export function ImportForm({ mappings }: Props) {
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
                 Confirm Import
               </Button>
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={saveAsDefault}
+                  onChange={(e) => setSaveAsDefault(e.target.checked)}
+                  className="h-4 w-4 rounded border-border"
+                />
+                Remember this format for next time
+              </label>
             </div>
           </CardContent>
         </Card>

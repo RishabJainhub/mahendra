@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
+import { getSupplierDefaultImportFormat, saveSupplierDefaultImportFormat } from '@/app/actions/supplier-defaults';
 import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/pricing';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
@@ -19,7 +20,7 @@ type DuplicateBill = {
   supplierName: string;
 };
 
-type FileType = 'xml' | 'xlsx' | 'xls' | 'pdf';
+type FileType = 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
 
 type Props = {
   suppliers: { id: string; name: string }[];
@@ -30,6 +31,7 @@ function detectFileType(fileName: string): FileType {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.xml')) return 'xml';
   if (lower.endsWith('.pdf')) return 'pdf';
+  if (lower.endsWith('.csv')) return 'csv';
   if (lower.endsWith('.xls')) return 'xls';
   return 'xlsx';
 }
@@ -49,6 +51,19 @@ export function ImportForm({ suppliers, mappings }: Props) {
   const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [saveAsDefault, setSaveAsDefault] = useState(true);
+
+  // When the supplier changes, load their saved default import format.
+  useEffect(() => {
+    if (!supplierId) return;
+    let cancelled = false;
+    (async () => {
+      const result = await getSupplierDefaultImportFormat(supplierId);
+      if (cancelled || !result.ok || !result.data) return;
+      if (result.data.mapping_id) setMappingId(result.data.mapping_id);
+    })();
+    return () => { cancelled = true; };
+  }, [supplierId]);
 
   // Clean up any pending Storage upload when the component unmounts.
   useEffect(() => {
@@ -141,9 +156,19 @@ export function ImportForm({ suppliers, mappings }: Props) {
           ? `Replaced existing bill — imported ${result.data.itemCount} items`
           : `Imported bill with ${result.data.itemCount} items`
       );
+      // Save this supplier's default format for next time.
+      if (saveAsDefault) {
+        const saveResult = await saveSupplierDefaultImportFormat({
+          supplierId,
+          fileType: fileData.fileType,
+          mappingId: fileData.mappingId ?? '',
+        });
+        if (saveResult.ok) {
+          setMessage((prev) => `${prev} · Saved as ${fileData.fileType.toUpperCase()} default for this supplier`);
+        }
+      }
       setPreview(null);
       setBillMeta(null);
-      // Server already deleted the storage object; clear local reference.
       setFileData(null);
       setDuplicate(null);
     } else if (result.code === 'DUPLICATE_BILL' && result.meta?.existingBillId) {
@@ -244,7 +269,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
         <label className="mb-1 block text-sm font-medium">Tally File</label>
         <input
           type="file"
-          accept=".xml,.xlsx,.xls,.pdf,application/pdf"
+          accept=".xml,.xlsx,.xls,.csv,.pdf,application/pdf,text/csv"
           onChange={handleFileChange}
           className="text-sm"
         />
@@ -288,6 +313,15 @@ export function ImportForm({ suppliers, mappings }: Props) {
           <Button onClick={handleConfirm} disabled={loading} className="mt-3">
             Confirm Import
           </Button>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={saveAsDefault}
+              onChange={(e) => setSaveAsDefault(e.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
+            Save as this supplier's default format
+          </label>
         </div>
       )}
     </div>
