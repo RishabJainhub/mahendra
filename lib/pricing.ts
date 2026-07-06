@@ -53,14 +53,15 @@ export function calcDNA(rate: number, rule: PricingRule): number {
 }
 
 /**
- * Round `value` up to the nearest positive `step`. Treats values already at a
- * multiple (within float epsilon) as exact — so 1265.0000001 stays at 1265,
- * but 1263 goes to 1265.
+ * Round `value` up to the nearest positive `step` — pure ceiling behavior.
+ *   2051 → 2055, 2054 → 2055, 2056 → 2060, 2059 → 2060.
+ *   Values already exactly at a multiple stay (2050 → 2050).
+ * Matches the DB trigger `ceil(v_dna_price / 5.0) * 5` exactly so the JS
+ * recompute action and the DB trigger always agree.
  */
 export function roundUpToNearest(value: number, step: number): number {
   if (!Number.isFinite(value) || value <= 0 || step <= 0) return 0;
-  const eps = 1e-9;
-  return Math.ceil((value - eps) / step) * step;
+  return Math.ceil(value / step) * step;
 }
 
 /** Render a sticker price without trailing zeros — e.g. 5326, 4205.5 */
