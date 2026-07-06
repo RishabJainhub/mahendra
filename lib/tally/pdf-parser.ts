@@ -107,39 +107,9 @@ function cleanDescription(raw: string, hsn?: string): string {
     .trim();
 }
 
-/**
- * Render-time safety net: strip DNA/MA labels, company codes, amounts, unit
- * markers, and GST/HSN tails from a description before printing on a label.
- * Applied in lib/pdf/index.tsx so even legacy bill_items imported before the
- * parser fix render with just the item name.
- *
- * Strategy: strip sticker labels / amounts / units first, then take everything
- * before the first standalone number (the company code) — that's the item name.
- *
- *   "S/N1102 63 DNA1605B"                       → "S/N1102"
- *   "ASHRAY 149 DNA1600B18,200.00PCS1,300.00…"  → "ASHRAY"
- *   "DHURANDHAR-2 149 DNA1540B"                 → "DHURANDHAR-2"
- *   "SMART GIRL 215 D/NA1375B"                  → "SMART GIRL"
- */
-export function cleanItemNameForLabel(raw: string): string {
-  if (!raw) return '';
-
-  // If the description has a "<company_code> <DNA/MA label>" pattern, take
-  // everything BEFORE the company code — that's the item name.
-  const labelMatch = raw.match(/^(.+?)\s+\d+\s+(?:MA|D\s*\/?\s*NA)\s*\d+(?:\.\d+)?\s*B/i);
-  if (labelMatch && labelMatch[1].trim().length > 0) {
-    return labelMatch[1].trim().replace(/^\d+(?=[A-Za-z])/, '').trim();
-  }
-
-  // No DNA/MA label — strip amounts, units, decimals, and GST/HSN tails.
-  return raw
-    .replace(/\d+\s*%\s*\d{4,8}/gi, ' ')
-    .replace(/\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?/g, ' ')
-    .replace(/\d+\.\d{2}/g, ' ')
-    .replace(/\b(PCS|NOS|MTRS?|MT|KG|GMS?|GM|BOXES?|PR|PRS|SET|SETS?)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// cleanItemNameForLabel has moved to lib/tally/clean-name.ts (browser-safe,
+// no pdf-parse dependency) so it can be imported from client components.
+export { cleanItemNameForLabel } from '@/lib/tally/clean-name';
 
 function findFieldAfterLabel(lines: string[], labelRegex: RegExp): string | null {
   for (let i = 0; i < lines.length - 1; i++) {
