@@ -49,14 +49,15 @@ describe('pricing', () => {
     expect(calcDNA(1000, rule)).toBe(1265);
   });
 
-  it('roundUpToNearest always rounds up to the next multiple of 5', () => {
+  it('roundUpToNearest: floor-then-ceil (decimals at a multiple stay)', () => {
     expect(roundUpToNearest(2051, 5)).toBe(2055);
     expect(roundUpToNearest(2054, 5)).toBe(2055);
     expect(roundUpToNearest(2056, 5)).toBe(2060);
     expect(roundUpToNearest(2059, 5)).toBe(2060);
     expect(roundUpToNearest(2050, 5)).toBe(2050);
-    expect(roundUpToNearest(1263, 5)).toBe(1265);
-    expect(roundUpToNearest(1265, 5)).toBe(1265);
+    expect(roundUpToNearest(2070.34, 5)).toBe(2070);
+    expect(roundUpToNearest(2075.01, 5)).toBe(2075);
+    expect(roundUpToNearest(2050.99, 5)).toBe(2050);
     expect(roundUpToNearest(0, 5)).toBe(0);
   });
 
