@@ -1,7 +1,7 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { formatINR, formatLabelPrice } from '@/lib/pricing';
-import { cleanItemNameForLabel } from '@/lib/tally/pdf-parser';
+import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
 import {
   chunkLabelsForPages,
   computeLabelGrid,
