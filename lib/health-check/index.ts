@@ -42,9 +42,9 @@ export function runPricingFormulaChecks(): HealthCheckResult[] {
   results.push({
     id: 'pricing-ma-consecutive',
     category: 'pricing',
-    name: 'MA consecutive markups (rate × 1.28 × 1.05)',
-    pass: Math.abs(maPrice - 5376) < 0.001,
-    expected: '5376',
+    name: 'MA consecutive MU markups (rate / 0.72 / 0.95)',
+    pass: Math.abs(maPrice - 5847) < 0.001,
+    expected: '5847',
     actual: maPrice.toFixed(2),
   });
 
