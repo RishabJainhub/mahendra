@@ -29,6 +29,24 @@ export const DEFAULT_LABEL_LAYOUT: LayoutPDF = {
 export const LABEL_ROLL_WIDTH_PT = 141.73; // 50mm (print-head width)
 export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm (feed direction)
 
+/**
+ * Max characters that fit on one line of a 50mm roll label at the given font
+ * size. The label is 141pt wide with 6pt horizontal padding → ~135pt usable.
+ * At 14pt Helvetica-Bold the average glyph advance is ~7.5pt, so ~18 chars.
+ * We err on the safe side and truncate to 16 with an ellipsis so the
+ * description NEVER wraps to a second line (which would push the DNA/MA lines
+ * onto the next sticker).
+ */
+const ROLL_DESC_MAX_CHARS = 16;
+const A4_DESC_MAX_CHARS = 22;
+
+/** Truncate to a single line. Long descriptions get an ellipsis — they never wrap. */
+function truncateForLabel(text: string, maxChars: number): string {
+  const trimmed = (text ?? '').trim().replace(/\s+/g, ' ');
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, Math.max(1, maxChars - 1))}…`;
+}
+
 const rollStyles = StyleSheet.create({
   rollPage: {
     flex: 1,
@@ -167,7 +185,9 @@ function LabelCell({
         { width: grid.labelWidth, minHeight: safeHeight },
       ]}
     >
-      <Text style={styles.line1}>{label.item.description}</Text>
+      <Text style={styles.line1}>
+        {truncateForLabel(label.item.description, A4_DESC_MAX_CHARS)}
+      </Text>
       {line2 ? <Text style={styles.line2}>{line2}</Text> : null}
       <Text style={styles.line3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
       <Text style={styles.line4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
@@ -258,7 +278,9 @@ export function renderLabelRollPDF(
             style={rollStyles.rollPage}
           >
             <View style={rollStyles.rollContent}>
-              <Text style={rollStyles.rollLine1}>{label.item.description}</Text>
+              <Text style={rollStyles.rollLine1}>
+                {truncateForLabel(label.item.description, ROLL_DESC_MAX_CHARS)}
+              </Text>
               {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
               <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
               <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
