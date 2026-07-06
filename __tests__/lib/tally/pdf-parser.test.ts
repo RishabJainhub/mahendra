@@ -89,19 +89,19 @@ TotalRs 63,668.00
 
     expect(result.items).toHaveLength(3);
 
-    expect(result.items[0].name).toBe('PUSHKAR 151');
+    expect(result.items[0].name).toBe('PUSHKAR');
     expect(result.items[0].qty).toBe(6);
     expect(result.items[0].rate).toBe(2640);
     expect(result.items[0].hsn).toBe('540752');
 
     // Sl number glued to the description ("2SIVAKASI…") is stripped, and
-    // the supplier's "DNA1960B" sticker label is removed.
-    expect(result.items[1].name).toBe('SIVAKASI LACE 228');
+    // the supplier's "DNA1960B" sticker label + company code are removed.
+    expect(result.items[1].name).toBe('SIVAKASI LACE');
     expect(result.items[1].qty).toBe(5);
     expect(result.items[1].rate).toBe(1960);
     expect(result.items[1].hsn).toBe('630790');
 
-    expect(result.items[2].name).toBe('TARINIKA.C 147');
+    expect(result.items[2].name).toBe('TARINIKA.C');
     expect(result.items[2].qty).toBe(5);
     expect(result.items[2].rate).toBe(1960);
     expect(result.items[2].hsn).toBe('540710');

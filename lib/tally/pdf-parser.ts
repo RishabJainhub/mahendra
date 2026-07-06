@@ -62,24 +62,81 @@ function normalizeDate(raw: string): string {
  * avoids the trailing HSN digit merging with the first amount (e.g.
  * "RJ 540741" + "44,919.00" concatenated as "RJ 54074144,919.00").
  */
+/**
+ * Clean a raw item description so only the human-readable item name remains on
+ * the printed label. Strips, in order:
+ *
+ *   1. The supplier's pre-printed DNA/MA sticker label — "DNA1605B", "MA1827B".
+ *      Also handles PDF-extraction artifacts where a line break splits "DNA"
+ *      into "D/NA" or "D / NA".
+ *   2. Trailing amount strings — "18,200.00", "1600.00".
+ *   3. The trailing company code — a standalone 2-3 digit number after the
+ *      item name (e.g. "ASHRAY 149" → "ASHRAY", "S/N1102 63" → "S/N1102").
+ *      Numbers that are part of the name (like "DHURANDHAR-2" or "S/N1102")
+ *      are preserved because they aren't preceded by a space.
+ *   4. The HSN if it appears as a trailing boundary.
+ */
 function cleanDescription(raw: string, hsn?: string): string {
   if (hsn) {
     const idx = raw.indexOf(hsn);
     if (idx >= 0) {
       const after = raw.slice(idx + hsn.length);
-      // If everything after the HSN is only amount characters, the description
-      // ends at (and includes) the HSN.
       if (after && /^[\s\d,.\-]+$/.test(after)) {
         return raw.slice(0, idx + hsn.length).trim();
       }
     }
   }
 
+  // If the description has a "<company_code> <DNA/MA label>" pattern, take
+  // everything BEFORE the company code — that's the item name. The company
+  // code is a short standalone number (149, 215, 63) between the name and the
+  // DNA/MA sticker label.
+  const labelMatch = raw.match(/^(.+?)\s+\d+\s+(?:MA|D\s*\/?\s*NA)\s*\d+(?:\.\d+)?\s*B/i);
+  if (labelMatch && labelMatch[1].trim().length > 0) {
+    // Strip a leading sl-no digit glued to the name (e.g. "2SIVAKASI" → "SIVAKASI").
+    return labelMatch[1].trim().replace(/^\d+(?=[A-Za-z])/, '').trim();
+  }
+
+  // No DNA/MA label found — just strip amounts, unit markers, and decimals.
   return raw
-    .replace(/\b(MA|DNA)\d+(?:\.\d+)?B/gi, '')
     .replace(/\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?/g, ' ')
     .replace(/\d+\.\d{2}/g, ' ')
+    .replace(/\b(PCS|NOS|MTRS?|MT|KG|GMS?|GM|BOXES?|PR|PRS|SET|SETS?)\b/gi, ' ')
     .replace(/^\s*\d+(?=[A-Za-z])/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Render-time safety net: strip DNA/MA labels, company codes, amounts, unit
+ * markers, and GST/HSN tails from a description before printing on a label.
+ * Applied in lib/pdf/index.tsx so even legacy bill_items imported before the
+ * parser fix render with just the item name.
+ *
+ * Strategy: strip sticker labels / amounts / units first, then take everything
+ * before the first standalone number (the company code) — that's the item name.
+ *
+ *   "S/N1102 63 DNA1605B"                       → "S/N1102"
+ *   "ASHRAY 149 DNA1600B18,200.00PCS1,300.00…"  → "ASHRAY"
+ *   "DHURANDHAR-2 149 DNA1540B"                 → "DHURANDHAR-2"
+ *   "SMART GIRL 215 D/NA1375B"                  → "SMART GIRL"
+ */
+export function cleanItemNameForLabel(raw: string): string {
+  if (!raw) return '';
+
+  // If the description has a "<company_code> <DNA/MA label>" pattern, take
+  // everything BEFORE the company code — that's the item name.
+  const labelMatch = raw.match(/^(.+?)\s+\d+\s+(?:MA|D\s*\/?\s*NA)\s*\d+(?:\.\d+)?\s*B/i);
+  if (labelMatch && labelMatch[1].trim().length > 0) {
+    return labelMatch[1].trim().replace(/^\d+(?=[A-Za-z])/, '').trim();
+  }
+
+  // No DNA/MA label — strip amounts, units, decimals, and GST/HSN tails.
+  return raw
+    .replace(/\d+\s*%\s*\d{4,8}/gi, ' ')
+    .replace(/\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?/g, ' ')
+    .replace(/\d+\.\d{2}/g, ' ')
+    .replace(/\b(PCS|NOS|MTRS?|MT|KG|GMS?|GM|BOXES?|PR|PRS|SET|SETS?)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
