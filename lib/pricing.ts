@@ -75,15 +75,20 @@ export function calcDNA(rate: number, rule: PricingRule): number {
 }
 
 /**
- * Round `value` up to the nearest positive `step` — pure ceiling behavior.
- *   2051 → 2055, 2054 → 2055, 2056 → 2060, 2059 → 2060.
- *   Values already exactly at a multiple stay (2050 → 2050).
- * Matches the DB trigger `ceil(v_dna_price / 5.0) * 5` exactly so the JS
- * recompute action and the DB trigger always agree.
+ * Round `value` up to the nearest positive `step`, but if the value's integer
+ * part is already at a multiple of `step`, keep it there (don't jump to the
+ * next one). This is "floor then ceil":
+ *
+ *   2051 → 2055, 2054 → 2055, 2056 → 2060, 2059 → 2060
+ *   2050 → 2050 (already at a multiple, stays)
+ *   2070.34 → 2070 (integer part 2070 is a multiple of 5, decimals dropped)
+ *   2075.01 → 2075 (already at a multiple, stays)
+ *
+ * Matches the DB trigger `ceil(floor(v_dna_price) / 5.0) * 5` exactly.
  */
 export function roundUpToNearest(value: number, step: number): number {
   if (!Number.isFinite(value) || value <= 0 || step <= 0) return 0;
-  return Math.ceil(value / step) * step;
+  return Math.ceil(Math.floor(value) / step) * step;
 }
 
 /** Render a sticker price without trailing zeros — e.g. 5326, 4205.5 */
