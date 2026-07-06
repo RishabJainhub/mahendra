@@ -52,9 +52,9 @@ export function runPricingFormulaChecks(): HealthCheckResult[] {
   results.push({
     id: 'pricing-dna-consecutive',
     category: 'pricing',
-    name: 'DNA consecutive markups (rate × 1.20 × 1.05)',
-    pass: Math.abs(dnaPrice - 5040) < 0.001,
-    expected: '5040',
+    name: 'DNA: rate × 1.20 then MU5% (hybrid), round up to 5',
+    pass: Math.abs(dnaPrice - 5055) < 0.001,
+    expected: '5055',
     actual: dnaPrice.toFixed(2),
   });
 

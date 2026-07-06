@@ -41,6 +41,28 @@ export function applyConsecutiveMU(
   return rate / d1 / d2;
 }
 
+/**
+ * Hybrid markup chain used by DNA: first a simple percentage markup, then a
+ * calculator-MU (margin) markup. Matches the user's "rate × x% MU5%" formula:
+ *   step1 = rate × (1 + m1/100)   — simple markup
+ *   step2 = step1 / (1 - m2/100)  — calculator MU
+ *
+ * Example: rate 1600, m1=22, m2=5 → 1600 × 1.22 = 1952 → 1952 / 0.95 = 2054.74
+ * → round up to 5 → 2055.
+ */
+export function applyMarkupThenMU(
+  rate: number,
+  m1: number | null | undefined,
+  m2: number | null | undefined
+): number {
+  const a = Number(m1) || 0;
+  const b = Number(m2) || 0;
+  const afterMarkup = rate * (1 + a / 100);
+  const divisor = 1 - b / 100;
+  if (divisor <= 0) return afterMarkup;
+  return afterMarkup / divisor;
+}
+
 export function calcMA(rate: number, rule: PricingRule): number {
   const raw = applyConsecutiveMU(rate, rule.ma_markup1_pct, rule.ma_markup2_pct);
   // Drop the decimal without rounding — 1827.49 → 1827, 1827.99 → 1827.
@@ -48,7 +70,7 @@ export function calcMA(rate: number, rule: PricingRule): number {
 }
 
 export function calcDNA(rate: number, rule: PricingRule): number {
-  const raw = applyConsecutiveMarkups(rate, rule.dna_markup1_pct, rule.dna_markup2_pct);
+  const raw = applyMarkupThenMU(rate, rule.dna_markup1_pct, rule.dna_markup2_pct);
   return roundUpToNearest(raw, 5);
 }
 
@@ -99,10 +121,10 @@ function describeChain(
   if (m1 > 0) parts.push(formatOp(m1, op1));
   if (m2 > 0) parts.push(formatOp(m2, op2));
   const chain = parts.length ? parts.join('+') : 'flat';
-  // MA chain uses the calculator-MU (margin) formula; DNA uses simple markup.
+  // MA = both MU (margin). DNA = simple markup then MU (margin).
   const price = label === 'MA'
     ? applyConsecutiveMU(sampleRate, m1, m2)
-    : applyConsecutiveMarkups(sampleRate, m1, m2);
+    : applyMarkupThenMU(sampleRate, m1, m2);
   return `${label}: ${chain} → ${formatLabelPrice(price)}`;
 }
 
