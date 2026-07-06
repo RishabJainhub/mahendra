@@ -6,6 +6,10 @@ export type PricingRule = {
   gst_pct: number;
 };
 
+/**
+ * Apply two consecutive markups (simple percentage multipliers).
+ * Used by DNA. `rate × (1 + m1/100) × (1 + m2/100)`.
+ */
 export function applyConsecutiveMarkups(
   rate: number,
   m1: number | null | undefined,
@@ -16,9 +20,30 @@ export function applyConsecutiveMarkups(
   return rate * (1 + a / 100) * (1 + b / 100);
 }
 
+/**
+ * Apply two consecutive calculator-MU (margin) markups.
+ * Used by MA. This is the "MU" button on a physical calculator:
+ *   price = cost / (1 - margin/100)
+ * so two stacked markups are:  rate / (1 - m1/100) / (1 - m2/100).
+ *
+ * Example: rate 1250, MU28, MU5 → 1250 / 0.72 / 0.95 = 1827.49 → trunc 1827.
+ */
+export function applyConsecutiveMU(
+  rate: number,
+  m1: number | null | undefined,
+  m2: number | null | undefined
+): number {
+  const a = Number(m1) || 0;
+  const b = Number(m2) || 0;
+  const d1 = 1 - a / 100;
+  const d2 = 1 - b / 100;
+  if (d1 <= 0 || d2 <= 0) return rate;
+  return rate / d1 / d2;
+}
+
 export function calcMA(rate: number, rule: PricingRule): number {
-  const raw = applyConsecutiveMarkups(rate, rule.ma_markup1_pct, rule.ma_markup2_pct);
-  // Drop the decimal without rounding — 1458.24 → 1458, 1458.99 → 1458.
+  const raw = applyConsecutiveMU(rate, rule.ma_markup1_pct, rule.ma_markup2_pct);
+  // Drop the decimal without rounding — 1827.49 → 1827, 1827.99 → 1827.
   return Math.trunc(raw);
 }
 
@@ -73,7 +98,10 @@ function describeChain(
   if (m1 > 0) parts.push(formatOp(m1, op1));
   if (m2 > 0) parts.push(formatOp(m2, op2));
   const chain = parts.length ? parts.join('+') : 'flat';
-  const price = applyConsecutiveMarkups(sampleRate, m1, m2);
+  // MA chain uses the calculator-MU (margin) formula; DNA uses simple markup.
+  const price = label === 'MA'
+    ? applyConsecutiveMU(sampleRate, m1, m2)
+    : applyConsecutiveMarkups(sampleRate, m1, m2);
   return `${label}: ${chain} → ${formatLabelPrice(price)}`;
 }
 

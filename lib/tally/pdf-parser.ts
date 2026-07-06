@@ -220,7 +220,11 @@ export function parseTallyPdfText(text: string): TallyParseResult {
 }
 
 export async function parseTallyPdf(buffer: Buffer): Promise<TallyParseResult> {
-  const pdfParse = (await import('pdf-parse')).default;
+  // Import the internal lib directly to bypass pdf-parse's index.js self-test,
+  // which tries to read ./test/data/05-versions-space.pdf when module.parent
+  // is undefined. On Vercel (and any bundled serverless env) that file isn't
+  // deployed and the import crashes. The lib-only path has no such side effect.
+  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
   const data = await pdfParse(buffer);
   return parseTallyPdfText(data.text);
 }

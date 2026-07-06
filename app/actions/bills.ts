@@ -605,7 +605,9 @@ export async function importTallyBill(
         supplier_id: supplierId,
         bill_number: billData.number,
         bill_date: billData.date,
-        total_amount: billData.totals.amount,
+        // Placeholder — the trigger computes line-item totals after the
+        // bill_items INSERT below; we then refresh bills.total_amount to match.
+        total_amount: 0,
         status: 'imported',
       })
       .select('id')
@@ -637,6 +639,19 @@ export async function importTallyBill(
       logger.error('importTallyBill items insert failed', { reqId, error: itemsError.message });
       return fail(itemsError.message);
     }
+
+    // Refresh bills.total_amount from the line-item totals (computed by the
+    // trigger). This guarantees the header matches the sticker math regardless
+    // of what the parser thought the grand total was.
+    const { data: sumRow } = await supabase
+      .from('bill_items')
+      .select('total')
+      .eq('bill_id', bill.id);
+    const computedTotal = (sumRow ?? []).reduce((s, r) => s + Number(r.total ?? 0), 0);
+    await supabase
+      .from('bills')
+      .update({ total_amount: Math.round(computedTotal * 100) / 100 })
+      .eq('id', bill.id);
 
     await supabase.from('tally_imports').insert({
       supplier_id: supplierId,
@@ -1180,6 +1195,21 @@ export async function recomputeBillPricing(
       if (extractedHsn) hsnUpdated += 1;
       updated += 1;
     }
+
+    // Refresh bills.total_amount from the recomputed line-item totals so the
+    // header always matches the sticker math — never the parsed-PDF value.
+    const { data: sumRows } = await supabase
+      .from('bill_items')
+      .select('total')
+      .eq('bill_id', id);
+    const recomputedTotal = (sumRows ?? []).reduce(
+      (s, r) => s + Number(r.total ?? 0),
+      0
+    );
+    await supabase
+      .from('bills')
+      .update({ total_amount: Math.round(recomputedTotal * 100) / 100 })
+      .eq('id', id);
 
     await writeAudit('recompute_pricing', 'bill', id, {
       itemCount: updated,

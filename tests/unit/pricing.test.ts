@@ -9,8 +9,9 @@ describe('pricing regression', () => {
     gst_pct: 5,
   };
 
-  it('MA consecutive markups (28% then 5%)', () => {
-    expect(calcMA(4000, rule)).toBeCloseTo(5376);
+  it('MA consecutive MU markups (MU28 then MU5) using margin formula', () => {
+    // 4000 / 0.72 / 0.95 = 5847.95 → trunc 5847
+    expect(calcMA(4000, rule)).toBe(5847);
   });
 
   it('DNA consecutive markups (20% then 5%)', () => {
