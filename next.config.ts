@@ -12,7 +12,7 @@ const extraDevOrigins =
     .filter(Boolean) ?? [];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['bwip-js', 'pdf-parse'],
+  serverExternalPackages: ['bwip-js', 'pdf-parse', 'unpdf'],
   turbopack: {
     root: projectRoot,
   },

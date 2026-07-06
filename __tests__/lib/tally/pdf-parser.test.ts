@@ -1,4 +1,9 @@
-import { parseTallyPdfText } from '@/lib/tally/pdf-parser';
+import { readFileSync } from 'fs';
+import path from 'path';
+import { parseTallyPdf, parseTallyPdfText } from '@/lib/tally/pdf-parser';
+import { extractPdfText } from '@/lib/tally/pdf-extract';
+
+const FIXTURE_PDF = path.join(__dirname, '../../fixtures/Sales_1885_26-27.pdf');
 
 const SAMPLE_TALLY_PDF_TEXT = `
 Mahendra Saree House
@@ -194,5 +199,66 @@ TotalRs 1,25,657.00
 
     expect(result.items[5].name).toBe('SOUTH COTTON SELF');
     expect(result.items[5].hsn).toBe('540710');
+  });
+
+  it('extracts text from a real Tally PDF buffer (unpdf + fallback)', async () => {
+    const buffer = readFileSync(FIXTURE_PDF);
+    const text = await extractPdfText(buffer);
+    expect(text.length).toBeGreaterThan(100);
+    expect(text).toMatch(/Invoice\s*No/i);
+  });
+
+  it('parses a real Tally PDF end-to-end', async () => {
+    const buffer = readFileSync(FIXTURE_PDF);
+    const result = await parseTallyPdf(buffer);
+    expect(result.bill.number).toBe('1885/26-27');
+    expect(result.items.length).toBeGreaterThanOrEqual(3);
+    expect(result.items[0].name).toBe('PUSHKAR');
+  });
+
+  // Mirrors Purchase_66.pdf — compressed inline layout where PDF text extraction
+  // collapses each item onto one line (common for purchase invoices).
+  const INLINE_PURCHASE_66_TEXT = `
+INVOICE (Duplicate) MAHENDRA DISTRIBUTORS
+Supplier (Bill from) MARUTI CREATION 4002-4003,4TH FLOOR
+Invoice No. 66 Supplier Invoice No. & Date. 66 dt. 12-Jun-26
+Dated 12-Jun-26
+Sl Description of Goods AmountDisc. %perRateQuantityGSTHSN/SAC No. Rate
+1 ASHRAY 149 DNA1600B 18,200.00PCS1,300.0014 PCS5 %540710
+2 AASMAN 149 DNA1305B 12,720.00PCS1,060.0012 PCS5 %540710
+5 DHURANDHAR-2 149 DNA1540B 25,000.00PCS1,250.0020 PCS5 %540710
+96,925.00 continued ... INVOICE(Page 2)
+Total Rs 1,01,771.0083 PCS
+`;
+
+  it('parses compressed inline purchase invoice (Purchase_66 layout)', () => {
+    const result = parseTallyPdfText(INLINE_PURCHASE_66_TEXT);
+    expect(result.bill.number).toBe('66');
+    expect(result.bill.date).toBe('2026-06-12');
+    expect(result.bill.party).toBe('MARUTI CREATION');
+    expect(result.items).toHaveLength(3);
+    expect(result.items[0].name).toBe('ASHRAY');
+    expect(result.items[0].rate).toBe(1300);
+    expect(result.items[0].qty).toBe(14);
+    expect(result.items[2].name).toBe('DHURANDHAR-2');
+    expect(result.items[2].rate).toBe(1250);
+    expect(result.items[2].qty).toBe(20);
+  });
+
+  it('parses real Purchase_66 and Purchase_81 PDF buffers', async () => {
+    const p66 = readFileSync(path.join(__dirname, '../../fixtures/Purchase_66.pdf'));
+    const p81 = readFileSync(path.join(__dirname, '../../fixtures/Purchase_81.pdf'));
+
+    const r66 = await parseTallyPdf(p66);
+    expect(r66.bill.number).toBe('66');
+    expect(r66.items).toHaveLength(6);
+    expect(r66.items[0].name).toBe('ASHRAY');
+
+    const r81 = await parseTallyPdf(p81);
+    expect(r81.bill.number).toBe('81');
+    expect(r81.bill.party).toBe('KOYAL DESIGNER');
+    expect(r81.items).toHaveLength(1);
+    expect(r81.items[0].name).toBe('HOT STAR');
+    expect(r81.items[0].rate).toBe(1565);
   });
 });

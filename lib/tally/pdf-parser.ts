@@ -25,6 +25,20 @@ const SECTION_END_RE =
   /^(Total\s*Rs|Sub\s*Total|IGST\b|CGST\b|SGST\b|Amount\s*Chargeable|Tax\s*Amount|Round\s*Off)/i;
 const TOTAL_RS_LINE_RE = /Total\s*Rs\.?\s*([\d,]+(?:\.\d{1,2})?)/i;
 
+// Inline/compressed layout (Purchase_66 style) — PDF text extraction puts each
+// item on one continuous line instead of stacked columns:
+//   "1 ASHRAY 149 DNA1600B 18,200.00PCS1,300.0014 PCS5 %540710"
+// Description charset excludes % and commas so trailing "5 %540710" (GST) on
+// the previous item cannot be mistaken for sl-no "5" on the next.
+const INLINE_ITEM_RE =
+  /(\d+)\s+((?:[A-Za-z0-9/.\-\s&']+?))\s+(?:MA|D\s*\/?\s*NA)\s*(\d+(?:\.\d+)?)\s*B\s*([\d,]+\.\d{2})PCS([\d,]+\.\d{2})(\d+)\s+PCS\s*(\d+(?:\.\d+)?)\s*%\s*(\d{4,8})/gi;
+
+const SUPPLIER_PARTY_RE =
+  /Supplier\s*\(\s*Bill\s*from\s*\)\s+([A-Za-z][A-Za-z0-9\s&.\-'/]+?)(?=\s+(?:HOUSE|SHOP|SHOP\s*NO|4002|\d{3,}))/i;
+const INLINE_INVOICE_NO_RE = /Invoice\s*No\.?\s*(\d+(?:\/[\w-]+)?)/i;
+const INLINE_DATE_RE =
+  /(?:Dated|dt\.)\s*(\d{1,2}[-/][A-Za-z]{3}[-/]\d{2,4}|\d{8}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i;
+
 const MONTH_MAP: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
   JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
@@ -157,9 +171,13 @@ export function parseTallyPdfText(text: string): TallyParseResult {
     .map((l) => l.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 
-  // Prefer the column-stacked Tally layout (Sales_1885-style) when we can
-  // detect it. Fall back to the single-line regex parser for other templates.
+  // Try stacked-column and inline/compressed layouts; keep whichever finds more items.
   const structured = parseStructuredTallyInvoice(lines);
+  const inline = parseInlineTallyInvoice(text);
+  if (structured && inline) {
+    return inline.items.length >= structured.items.length ? inline : structured;
+  }
+  if (inline) return inline;
   if (structured) return structured;
 
   let billNumber = '';
@@ -247,13 +265,9 @@ export function parseTallyPdfText(text: string): TallyParseResult {
 }
 
 export async function parseTallyPdf(buffer: Buffer): Promise<TallyParseResult> {
-  // Import the internal lib directly to bypass pdf-parse's index.js self-test,
-  // which tries to read ./test/data/05-versions-space.pdf when module.parent
-  // is undefined. On Vercel (and any bundled serverless env) that file isn't
-  // deployed and the import crashes. The lib-only path has no such side effect.
-  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
-  const data = await pdfParse(buffer);
-  return parseTallyPdfText(data.text);
+  const { extractPdfText } = await import('./pdf-extract');
+  const text = await extractPdfText(buffer);
+  return parseTallyPdfText(text);
 }
 
 /**
@@ -362,6 +376,74 @@ function parseStructuredTallyInvoice(lines: string[]): TallyParseResult | null {
 
   const fallbackBillNumber = `PDF-${Date.now().toString(36).toUpperCase()}`;
   const fallbackDate = normalizeDate(billDate) || new Date().toISOString().slice(0, 10);
+
+  return {
+    bill: {
+      number: billNumber || fallbackBillNumber,
+      date: fallbackDate,
+      party: party || 'Unknown Party',
+      totals: { amount: totalAmount },
+    },
+    items,
+  };
+}
+
+/**
+ * Parser for compressed/inline Tally invoices (Purchase_66 style) where PDF
+ * text extraction collapses each item onto one line:
+ *   "1 ASHRAY 149 DNA1600B 18,200.00PCS1,300.0014 PCS5 %540710"
+ */
+function parseInlineTallyInvoice(text: string): TallyParseResult | null {
+  // Split on page continuations so repeated headers on page 2+ don't pollute matches.
+  const segments = text.split(/continued\s*\.\.\.|INVOICE\s*\(\s*Page\s*\d+\s*\)/i);
+  const items: TallyItem[] = [];
+  const re = new RegExp(INLINE_ITEM_RE.source, INLINE_ITEM_RE.flags);
+
+  for (const segment of segments) {
+    const headerIdx = segment.search(/Sl\s*Description\s*of\s*Goods/i);
+    const rawSection = headerIdx >= 0 ? segment.slice(headerIdx) : segment;
+    // PDF extractors vary: unpdf collapses to one line, pdf-parse inserts
+    // newlines and may glue "DNA1600B" directly to "18,200.00" with no space.
+    const searchText = rawSection.replace(/\s+/g, ' ');
+
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(searchText)) !== null) {
+      const rawDesc = match[2].trim();
+      const hsn = match[8];
+      const rate = parseAmount(match[5]);
+      const qty = Number(match[6]);
+      if (!rawDesc || rate <= 0 || !Number.isFinite(qty) || qty <= 0) continue;
+
+      const description = cleanDescription(`${rawDesc} DNA${match[3]}B`, hsn);
+      if (!description) continue;
+
+      items.push({
+        sku: slugSku(description),
+        name: description,
+        qty,
+        rate,
+        amount: qty * rate,
+        hsn: hsn || extractHsnFromDescription(description),
+      });
+    }
+  }
+
+  if (items.length === 0) return null;
+
+  const billNumber =
+    text.match(INLINE_INVOICE_NO_RE)?.[1]?.trim() ?? '';
+  const billDate = normalizeDate(text.match(INLINE_DATE_RE)?.[1]?.trim() ?? '');
+  const party = (text.match(SUPPLIER_PARTY_RE)?.[1] ?? '').replace(/\s+/g, ' ').trim().slice(0, 255);
+
+  let totalAmount = items.reduce((s, x) => s + x.amount, 0);
+  const totalMatch = text.match(TOTAL_RS_LINE_RE);
+  if (totalMatch) {
+    const parsed = parseAmount(totalMatch[1]);
+    if (parsed > 0) totalAmount = parsed;
+  }
+
+  const fallbackBillNumber = `PDF-${Date.now().toString(36).toUpperCase()}`;
+  const fallbackDate = billDate || new Date().toISOString().slice(0, 10);
 
   return {
     bill: {
