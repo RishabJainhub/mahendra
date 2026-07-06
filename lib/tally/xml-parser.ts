@@ -99,6 +99,13 @@ function getText(node: unknown): string {
   return '';
 }
 
+/** Pull the leading 4-8 digit HSN out of a label like "540822 HSN 5% SAREES". */
+function extractLeadingHsn(field: string): string {
+  if (!field) return '';
+  const m = field.match(/\b(\d{4,8})\b/);
+  return m ? m[1] : '';
+}
+
 export function parseTallyXml(xmlText: string): TallyParseResult {
   if (!xmlText || !xmlText.trim()) {
     throw new Error('Empty XML input');
@@ -175,7 +182,22 @@ export function parseTallyXml(xmlText: string): TallyParseResult {
     const qty = parseFloat(getText(entry.ACTUALQTY ?? entry.actualqty).replace(/[^0-9.-]/g, '')) || 0;
     const rate = parseFloat(getText(entry.RATE ?? entry.rate)) || 0;
     const amount = parseFloat(getText(entry.AMOUNT ?? entry.amount)) || qty * rate;
-    const explicitHsn = getText(entry.HSNCODE ?? entry.hsncode) || undefined;
+    // Tally stores the HSN in several possible fields depending on version and
+    // whether it's a stock-group-level or item-level HSN:
+    //   HSNCODE              — explicit item-level override (rare)
+    //   GSTHSNNAME           — "540822" (clean code, most common)
+    //   HSNSTOCKGROUPSOURCE  — "540822 HSN 5% SAREES" (code + label)
+    //   GSTSTOCKGROUPSOURCE  — same as above, GST-side mirror
+    const explicitHsn =
+      getText(entry.HSNCODE ?? entry.hsncode) ||
+      getText(entry.GSTHSNNAME ?? entry.gsthsnname) ||
+      extractLeadingHsn(
+        getText(entry.HSNSTOCKGROUPSOURCE ?? entry.hsnstockgroupsource)
+      ) ||
+      extractLeadingHsn(
+        getText(entry.GSTSTOCKGROUPSOURCE ?? entry.gststockgroupsource)
+      ) ||
+      undefined;
     const hsn =
       explicitHsn ??
       (require('./hsn') as typeof import('./hsn')).extractHsnFromDescription(name);

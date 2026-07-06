@@ -43,6 +43,52 @@ describe('xml-parser', () => {
     expect(result.items[0].sku).toBe('SAREE-001');
     expect(result.items[0].qty).toBe(2);
     expect(result.items[0].rate).toBe(500);
+    expect(result.items[0].hsn).toBe('5208');
+  });
+
+  // Mirrors real Tally purchase XML (Koyal.xml) — HSN is NOT in HSNCODE but in
+  // GSTHSNNAME / HSNSTOCKGROUPSOURCE / GSTSTOCKGROUPSOURCE.
+  const TALLY_STOCKGROUP_HSN_XML = `<?xml version="1.0"?>
+<ENVELOPE>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDATA>
+        <TALLYMESSAGE>
+          <VOUCHER>
+            <VOUCHERNUMBER>81</VOUCHERNUMBER>
+            <DATE>20260602</DATE>
+            <PARTYNAME>KOYAL DESIGNER</PARTYNAME>
+            <STATENAME>Gujarat</STATENAME>
+            <ALLINVENTORYENTRIES.LIST>
+              <STOCKITEMNAME>S/N1102 63 DNA1605B</STOCKITEMNAME>
+              <GSTSTOCKGROUPSOURCE>540822 HSN 5% SAREES</GSTSTOCKGROUPSOURCE>
+              <HSNSOURCETYPE>Stock Group</HSNSOURCETYPE>
+              <HSNSTOCKGROUPSOURCE>540822 HSN 5% SAREES</HSNSTOCKGROUPSOURCE>
+              <GSTHSNNAME>540822</GSTHSNNAME>
+              <GSTHSNDESCRIPTION>SAREES</GSTHSNDESCRIPTION>
+              <ACTUALQTY>47 PCS</ACTUALQTY>
+              <RATE>1250.00/PCS</RATE>
+              <AMOUNT>-58750.00</AMOUNT>
+            </ALLINVENTORYENTRIES.LIST>
+          </VOUCHER>
+        </TALLYMESSAGE>
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+
+  it('extracts HSN from GSTHSNNAME when HSNCODE is absent (real Tally export)', () => {
+    const result = parseTallyXml(TALLY_STOCKGROUP_HSN_XML);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].hsn).toBe('540822');
+  });
+
+  it('extracts HSN from HSNSTOCKGROUPSOURCE label when GSTHSNNAME is absent', () => {
+    const xml = TALLY_STOCKGROUP_HSN_XML
+      .replace('<GSTHSNNAME>540822</GSTHSNNAME>', '')
+      .replace('<GSTHSNDESCRIPTION>SAREES</GSTHSNDESCRIPTION>', '');
+    const result = parseTallyXml(xml);
+    expect(result.items[0].hsn).toBe('540822');
   });
 
   it('throws on invalid XML', () => {
