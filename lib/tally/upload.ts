@@ -23,6 +23,7 @@ const INLINE_CONTENT_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   xls: 'application/vnd.ms-excel',
+  csv: 'text/csv',
 };
 
 function detectExt(fileName: string): string {

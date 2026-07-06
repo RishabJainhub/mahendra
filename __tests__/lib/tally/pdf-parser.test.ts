@@ -38,6 +38,62 @@ describe('pdf-parser', () => {
     );
   });
 
+  // Generic (non-Tally) tabular invoice — columns separated by 2+ spaces.
+  const GENERIC_TABULAR_TEXT = `
+Invoice No: MARG-200
+Date: 15-Jun-2025
+Customer: Surat Textiles
+
+Description                Qty   Rate      Amount
+Silk Saree Model XYZ       2     500.00    1,000.00
+Cotton Saree Plain         5     300.00    1,500.00
+Designer Lehenga           1     2500.00   2,500.00
+
+Sub Total                  5,000.00
+CGST                       250.00
+Grand Total                5,250.00
+`;
+
+  it('parses generic tabular invoice (non-Tally)', () => {
+    const result = parseTallyPdfText(GENERIC_TABULAR_TEXT);
+    expect(result.bill.number).toBe('MARG-200');
+    expect(result.bill.date).toBe('2025-06-15');
+    expect(result.bill.party).toBe('Surat Textiles');
+    expect(result.items).toHaveLength(3);
+    expect(result.items[0].name).toBe('Silk Saree Model XYZ');
+    expect(result.items[0].qty).toBe(2);
+    expect(result.items[0].rate).toBe(500);
+    expect(result.items[2].name).toBe('Designer Lehenga');
+    expect(result.items[2].rate).toBe(2500);
+  });
+
+  // Generic multi-line invoice — description on one line, qty/rate/amount on next.
+  const GENERIC_MULTILINE_TEXT = `
+Invoice No.: ZOHO-301
+Dated: 20-May-2025
+Party: Chennai Silks
+
+Item Description
+Premium Silk Saree
+3   800.00   2,400.00
+Cotton Kurti
+10   450.00   4,500.00
+
+Total: 6,900.00
+`;
+
+  it('parses generic multi-line invoice (description + qty/rate/amount on next line)', () => {
+    const result = parseTallyPdfText(GENERIC_MULTILINE_TEXT);
+    expect(result.bill.number).toBe('ZOHO-301');
+    expect(result.items).toHaveLength(2);
+    expect(result.items[0].name).toBe('Premium Silk Saree');
+    expect(result.items[0].qty).toBe(3);
+    expect(result.items[0].rate).toBe(800);
+    expect(result.items[1].name).toBe('Cotton Kurti');
+    expect(result.items[1].qty).toBe(10);
+    expect(result.items[1].rate).toBe(450);
+  });
+
   it('throws on empty text', () => {
     expect(() => parseTallyPdfText('')).toThrow('no readable text');
   });

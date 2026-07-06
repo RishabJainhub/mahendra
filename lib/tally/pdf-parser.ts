@@ -12,7 +12,18 @@ const TOTAL_RE =
 
 /** Line: optional sl no, description, qty [unit], rate, amount */
 const ITEM_LINE_RE =
-  /^(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s*(?:pcs|nos|mtr|mt|mtrs?)?\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*$/i;
+  /^(?:\d+\s+)?(.+?)\s+(\d+(?:\.\d+)?)\s*(?:pcs|nos|mtr|mt|mtrs?)?\s+(\d+(?:[.,]\d+)*)\s+(\d+(?:[.,]\d+)*)\s*$/i;
+
+// Generic invoice item line — works on normalized (single-space) text.
+// Matches: "Silk Saree Model XYZ 2 500.00 1,000.00"
+// Description is non-greedy; qty/rate/amount are the last three numeric tokens.
+const GENERIC_ITEM_RE =
+  /^(.+?)\s+(\d+(?:\.\d+)?)\s+(\d+(?:[.,]\d+)*)\s+(\d+(?:[.,]\d+)*)\s*$/;
+
+// Generic "qty rate amount" continuation line (when description is on the
+// previous line). Matches: "2  500.00  1,000.00" or "2 500.00 1000.00".
+const QTY_RATE_AMOUNT_RE =
+  /^(\d+(?:\.\d+)?)\s+(\d+(?:[.,]\d+)*)\s+(\d+(?:[.,]\d+)*)\s*$/;
 
 // Stacked-column anchors (Sales_1885 style):
 //   "6 PCS"       qty + unit
@@ -171,97 +182,21 @@ export function parseTallyPdfText(text: string): TallyParseResult {
     .map((l) => l.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 
-  // Try stacked-column and inline/compressed layouts; keep whichever finds more items.
+  // Try stacked-column, inline/compressed, and generic invoice layouts.
+  // Keep whichever finds the most items.
   const structured = parseStructuredTallyInvoice(lines);
   const inline = parseInlineTallyInvoice(text);
-  if (structured && inline) {
-    return inline.items.length >= structured.items.length ? inline : structured;
-  }
-  if (inline) return inline;
-  if (structured) return structured;
-
-  let billNumber = '';
-  let billDate = '';
-  let party = '';
-
-  for (const line of lines) {
-    if (!billNumber) {
-      const m = line.match(BILL_NUMBER_RE);
-      if (m) billNumber = m[1].trim();
-    }
-    if (!billDate) {
-      const m = line.match(DATE_RE);
-      if (m) billDate = normalizeDate(m[1]);
-    }
-    if (!party) {
-      const m = line.match(PARTY_RE);
-      if (m) party = m[1].trim().slice(0, 255);
-    }
+  const generic = parseGenericInvoice(lines);
+  const candidates = [structured, inline, generic].filter(
+    (r): r is TallyParseResult => r !== null && r.items.length > 0
+  );
+  if (candidates.length > 0) {
+    return candidates.sort((a, b) => b.items.length - a.items.length)[0];
   }
 
-  const items: TallyItem[] = [];
-  let totalFromLines = 0;
-
-  for (const line of lines) {
-    if (/^(sl|s\.?no|description|item|particulars|qty|rate|amount)/i.test(line)) continue;
-    if (/^(sub\s*total|cgst|sgst|igst|round\s*off|total)/i.test(line)) continue;
-
-    const m = line.match(ITEM_LINE_RE);
-    if (!m) continue;
-
-    const name = m[1].trim();
-    if (name.length < 2) continue;
-
-    const qty = parseAmount(m[2]);
-    const rate = parseAmount(m[3]);
-    const amount = parseAmount(m[4]);
-    if (qty <= 0 || rate < 0) continue;
-
-    items.push({
-      sku: slugSku(name),
-      name,
-      qty,
-      rate,
-      amount: amount > 0 ? amount : qty * rate,
-      hsn: extractHsnFromDescription(name),
-    });
-    totalFromLines += amount > 0 ? amount : qty * rate;
-  }
-
-  if (items.length === 0) {
-    throw new Error(
-      'Could not find line items in this PDF. Export as XML from Tally (Alt+E) for best results.'
-    );
-  }
-
-  let totalAmount = totalFromLines;
-  for (const line of lines) {
-    const m = line.match(TOTAL_RE);
-    if (m) {
-      totalAmount = parseAmount(m[1]);
-      break;
-    }
-  }
-
-  if (!billNumber) {
-    billNumber = `PDF-${Date.now().toString(36).toUpperCase()}`;
-  }
-  if (!billDate) {
-    billDate = new Date().toISOString().slice(0, 10);
-  }
-  if (!party) {
-    party = 'Unknown Party';
-  }
-
-  return {
-    bill: {
-      number: billNumber,
-      date: billDate,
-      party,
-      totals: { amount: totalAmount },
-    },
-    items,
-  };
+  throw new Error(
+    'Could not find line items in this PDF. Export as XML or Excel from your accounting software for best results.'
+  );
 }
 
 export async function parseTallyPdf(buffer: Buffer): Promise<TallyParseResult> {
@@ -440,6 +375,161 @@ function parseInlineTallyInvoice(text: string): TallyParseResult | null {
   if (totalMatch) {
     const parsed = parseAmount(totalMatch[1]);
     if (parsed > 0) totalAmount = parsed;
+  }
+
+  const fallbackBillNumber = `PDF-${Date.now().toString(36).toUpperCase()}`;
+  const fallbackDate = billDate || new Date().toISOString().slice(0, 10);
+
+  return {
+    bill: {
+      number: billNumber || fallbackBillNumber,
+      date: fallbackDate,
+      party: party || 'Unknown Party',
+      totals: { amount: totalAmount },
+    },
+    items,
+  };
+}
+
+/**
+ * Generic invoice parser for non-Tally PDFs (Marg, Busy, Zoho Books, Vyapar,
+ * custom invoices). Handles two common layouts:
+ *
+ * 1. Tabular — columns separated by 2+ spaces:
+ *      "Silk Saree Model XYZ   2   500.00   1,000.00"
+ * 2. Multi-line — description on one line, qty/rate/amount on the next:
+ *      "Silk Saree Model XYZ"
+ *      "2  500.00  1,000.00"
+ *
+ * Bill meta (number/date/party) is extracted from common label patterns.
+ */
+function parseGenericInvoice(lines: string[]): TallyParseResult | null {
+  // Bound the item section: from after a header containing "description" or
+  // "item" up to the first totals marker.
+  const headerIdx = lines.findIndex(
+    (l) =>
+      /description|item\s*name|particulars|product/i.test(l) &&
+      /\b(qty|quantity|rate|price|amount)\b/i.test(l)
+  );
+  const startIdx = headerIdx >= 0 ? headerIdx + 1 : 0;
+  const totalIdx = lines.findIndex(
+    (l, i) => i > startIdx && SECTION_END_RE.test(l)
+  );
+  const endIdx = totalIdx > startIdx ? totalIdx : lines.length;
+
+  const items: TallyItem[] = [];
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const line = lines[i];
+
+    if (
+      /^(sl|s\.?no|description|item|particulars|qty|rate|amount|subtotal|sub\s*total|cgst|sgst|igst|round\s*off|total)/i.test(
+        line
+      )
+    )
+      continue;
+    if (/^\d+\s*$/i.test(line)) continue;
+
+    // Try tabular: "Description<2+spaces>Qty<spaces>Rate<spaces>Amount"
+    let m = line.match(GENERIC_ITEM_RE);
+    if (m) {
+      const name = m[1].trim();
+      const qty = Number(m[2]) || 0;
+      const rate = parseAmount(m[3]);
+      const amount = parseAmount(m[4]);
+      if (name.length >= 2 && qty > 0 && rate > 0) {
+        items.push({
+          sku: slugSku(name),
+          name,
+          qty,
+          rate,
+          amount: amount > 0 ? amount : qty * rate,
+          hsn: extractHsnFromDescription(name),
+        });
+        continue;
+      }
+    }
+
+    // Try multi-line: description on this line, qty/rate/amount on the next.
+    const next = lines[i + 1];
+    if (next && QTY_RATE_AMOUNT_RE.test(next) && !GENERIC_ITEM_RE.test(next)) {
+      const nm = next.match(QTY_RATE_AMOUNT_RE);
+      if (nm) {
+        const name = line.replace(/^\d+\s+/, '').trim();
+        const qty = Number(nm[1]) || 0;
+        const rate = parseAmount(nm[2]);
+        const amount = parseAmount(nm[3]);
+        if (
+          name.length >= 2 &&
+          qty > 0 &&
+          rate > 0 &&
+          !/^(total|subtotal|cgst|sgst|igst|round)/i.test(name)
+        ) {
+          items.push({
+            sku: slugSku(name),
+            name,
+            qty,
+            rate,
+            amount: amount > 0 ? amount : qty * rate,
+            hsn: extractHsnFromDescription(name),
+          });
+          i++;
+          continue;
+        }
+      }
+    }
+
+    // Try the original single-line pattern as a last resort.
+    const sm = line.match(ITEM_LINE_RE);
+    if (sm) {
+      const name = sm[1].trim();
+      const qty = parseAmount(sm[2]);
+      const rate = parseAmount(sm[3]);
+      const amount = parseAmount(sm[4]);
+      if (name.length >= 2 && qty > 0 && rate > 0) {
+        items.push({
+          sku: slugSku(name),
+          name,
+          qty,
+          rate,
+          amount: amount > 0 ? amount : qty * rate,
+          hsn: extractHsnFromDescription(name),
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) return null;
+
+  let billNumber = '';
+  let billDate = '';
+  let party = '';
+
+  for (const line of lines) {
+    if (!billNumber) {
+      const m = line.match(BILL_NUMBER_RE);
+      if (m) billNumber = m[1].trim();
+    }
+    if (!billDate) {
+      const m = line.match(DATE_RE);
+      if (m) billDate = normalizeDate(m[1]);
+    }
+    if (!party) {
+      const m = line.match(PARTY_RE);
+      if (m) party = m[1].trim().slice(0, 255);
+    }
+  }
+
+  let totalAmount = items.reduce((s, x) => s + x.amount, 0);
+  for (const line of lines) {
+    const m = line.match(TOTAL_RE);
+    if (m) {
+      const parsed = parseAmount(m[1]);
+      if (parsed > 0) {
+        totalAmount = parsed;
+        break;
+      }
+    }
   }
 
   const fallbackBillNumber = `PDF-${Date.now().toString(36).toUpperCase()}`;

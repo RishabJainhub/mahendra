@@ -413,7 +413,7 @@ export async function getBillStickers(
 
 export async function previewTallyBill(input: {
   fileName: string;
-  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileType: 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
   fileContent?: string;
   storagePath?: string;
   mappingId?: string;
@@ -456,7 +456,7 @@ export async function previewTallyBill(input: {
 }
 
 type ResolvedImport = {
-  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileType: 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
   text?: string;
   buffer?: Buffer;
 };
@@ -467,7 +467,7 @@ type ResolvedImport = {
  * surface a clean error.
  */
 async function resolveTallyBytes(parsed: {
-  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileType: 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
   fileContent?: string;
   storagePath?: string;
 }): Promise<ResolvedImport> {
@@ -491,7 +491,7 @@ async function resolveTallyBytes(parsed: {
 }
 
 async function parseTallyImport(parsed: {
-  fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+  fileType: 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
   fileContent?: string;
   storagePath?: string;
   mappingId?: string;
@@ -506,21 +506,31 @@ async function parseTallyImport(parsed: {
   if (!resolved.buffer) {
     throw new Error('Could not read file contents');
   }
-  const supabase = await createClient();
-  const mappingId = parsed.mappingId ?? DEFAULT_TALLY_MAPPING_ID;
-  const { data: mapping } = await supabase
-    .from('tally_column_mappings')
-    .select('column_map')
-    .eq('id', mappingId)
-    .single();
-  if (!mapping) throw new Error('Column mapping not found');
-  return parseTallyXlsx(resolved.buffer, mapping.column_map as Record<string, string>);
+
+  const isCsv = resolved.fileType === 'csv';
+
+  // If a mappingId is provided, load the saved column mapping from the DB.
+  // Otherwise (auto-detect), let the parser figure out columns from headers.
+  let mapping: Record<string, string> | undefined;
+  if (parsed.mappingId) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from('tally_column_mappings')
+      .select('column_map')
+      .eq('id', parsed.mappingId)
+      .single();
+    if (data?.column_map) {
+      mapping = data.column_map as Record<string, string>;
+    }
+  }
+
+  return parseTallyXlsx(resolved.buffer, mapping, isCsv);
 }
 
 export async function importTallyBill(
   input: {
     fileName: string;
-    fileType: 'xml' | 'xlsx' | 'xls' | 'pdf';
+    fileType: 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
     fileContent?: string;
     storagePath?: string;
     mappingId?: string;

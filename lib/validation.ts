@@ -17,7 +17,7 @@ export const MAX_IMPORT_CONTENT_CHARS = 2_000_000;
 export const TallyImportInputSchema = z
   .object({
     fileName: z.string().min(1).max(255),
-    fileType: z.enum(['xml', 'xlsx', 'xls', 'pdf']),
+    fileType: z.enum(['xml', 'xlsx', 'xls', 'csv', 'pdf']),
     fileContent: z.string().min(1).max(MAX_IMPORT_CONTENT_CHARS).optional(),
     storagePath: z
       .string()
@@ -31,7 +31,7 @@ export const TallyImportInputSchema = z
     message: 'Provide exactly one of fileContent or storagePath',
     path: ['fileContent'],
   })
-  .refine((d) => d.fileType === 'pdf' || d.fileType === 'xml' || d.mappingId, {
+  .refine((d) => d.fileType === 'pdf' || d.fileType === 'xml' || d.fileType === 'csv' || d.mappingId, {
     message: 'Column mapping is required for Excel imports',
     path: ['mappingId'],
   });
