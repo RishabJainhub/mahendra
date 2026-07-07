@@ -10,6 +10,7 @@ import { logger, newRequestId } from '@/lib/logger';
 import { writeAudit } from '@/lib/audit';
 import {
   SupplierInviteInputSchema,
+  SupplierCreateInputSchema,
   PricingRuleInputSchema,
   SupplierUpdateInputSchema,
 } from '@/lib/validation';
@@ -33,9 +34,21 @@ export async function getSuppliers() {
     const { data: rules } = await supabase.from('pricing_rules').select('*');
     const ruleBySupplier = new Map((rules ?? []).map((r) => [r.supplier_id, r]));
 
+    // Which suppliers already have a login? Used to show "Send invite" only for
+    // those that don't. Best-effort — if RLS blocks the read we default to
+    // "no login" (the invite action itself blocks a duplicate invite).
+    const { data: userRows } = await supabase
+      .from('users')
+      .select('supplier_id')
+      .eq('role', 'supplier');
+    const loginSet = new Set(
+      (userRows ?? []).map((u) => u.supplier_id).filter(Boolean)
+    );
+
     return (suppliers ?? []).map((s) => ({
       ...s,
       pricing_rule: ruleBySupplier.get(s.id) ?? null,
+      has_login: loginSet.has(s.id),
     }));
   } catch (err) {
     logger.error('getSuppliers error', { reqId, err });
@@ -208,6 +221,190 @@ export async function inviteSupplier(
   } catch (err) {
     logger.error('inviteSupplier error', { reqId, err });
     return fail('Invite failed');
+  }
+}
+
+/**
+ * Add a supplier record WITHOUT creating a login/invite. Creates the supplier
+ * row and its pricing rule so bills can be imported and priced immediately.
+ * Use `sendSupplierInvite` later to give them a login.
+ */
+export async function createSupplier(
+  formData: FormData
+): Promise<ActionResult<{ supplierId: string; formulaSummary: string }>> {
+  const reqId = newRequestId();
+  try {
+    const admin = await requireAdmin();
+    const parsed = SupplierCreateInputSchema.safeParse({
+      name: formData.get('name'),
+      email: formData.get('email') || '',
+      phone: formData.get('phone') || undefined,
+      code_prefix: formData.get('code_prefix') ?? undefined,
+      code_number: formData.get('code_number') ?? undefined,
+      ma_markup1_pct: formData.get('ma_markup1_pct') ?? 0,
+      ma_markup2_pct: formData.get('ma_markup2_pct') ?? 0,
+      dna_markup1_pct: formData.get('dna_markup1_pct') ?? 0,
+      dna_markup2_pct: formData.get('dna_markup2_pct') ?? 0,
+      gst_pct: formData.get('gst_pct') ?? 5,
+    });
+    if (!parsed.success) return fromZod(parsed.error);
+
+    const email = parsed.data.email ? parsed.data.email.toLowerCase().trim() : null;
+    const service = createServiceClient();
+
+    const { data: supplier, error: supplierErr } = await service
+      .from('suppliers')
+      .insert({
+        tenant_id: admin.tenant_id,
+        name: parsed.data.name,
+        email,
+        phone: parsed.data.phone ?? null,
+        code_prefix: parsed.data.code_prefix || null,
+        code_number: parsed.data.code_number || null,
+        active: true,
+      })
+      .select('id')
+      .single();
+
+    if (supplierErr || !supplier) {
+      logger.error('createSupplier insert failed', { reqId, error: supplierErr?.message });
+      return fail(supplierErr?.message ?? 'Failed to create supplier');
+    }
+
+    const { data: rule, error: ruleErr } = await service
+      .from('pricing_rules')
+      .insert({
+        tenant_id: admin.tenant_id,
+        supplier_id: supplier.id,
+        model: 'standard',
+        ma_markup1_pct: parsed.data.ma_markup1_pct,
+        ma_markup2_pct: parsed.data.ma_markup2_pct,
+        dna_markup1_pct: parsed.data.dna_markup1_pct,
+        dna_markup2_pct: parsed.data.dna_markup2_pct,
+        gst_pct: parsed.data.gst_pct,
+      })
+      .select('id')
+      .single();
+
+    if (ruleErr || !rule) {
+      logger.error('createSupplier pricing rule failed', { reqId, error: ruleErr?.message });
+      return fail(ruleErr?.message ?? 'Failed to create pricing rule');
+    }
+
+    await service.from('suppliers').update({ pricing_rule_id: rule.id }).eq('id', supplier.id);
+
+    await writeAudit('create', 'supplier', supplier.id, { name: parsed.data.name });
+
+    logger.info('createSupplier success', { reqId, supplierId: supplier.id });
+    revalidatePath('/admin/suppliers');
+    revalidatePath('/admin/pricing');
+
+    const formulaSummary = describeFormula({
+      ma_markup1_pct: parsed.data.ma_markup1_pct,
+      ma_markup2_pct: parsed.data.ma_markup2_pct,
+      dna_markup1_pct: parsed.data.dna_markup1_pct,
+      dna_markup2_pct: parsed.data.dna_markup2_pct,
+      gst_pct: parsed.data.gst_pct,
+    });
+
+    return ok({ supplierId: supplier.id, formulaSummary });
+  } catch (err) {
+    logger.error('createSupplier error', { reqId, err });
+    return fail('Create supplier failed');
+  }
+}
+
+/**
+ * Create a login for an EXISTING supplier and return a one-time temp password.
+ * The supplier must already have an email. Blocks a second invite if a login
+ * already exists.
+ */
+export async function sendSupplierInvite(
+  supplierId: string
+): Promise<ActionResult<{ tempPassword: string; formulaSummary: string }>> {
+  const reqId = newRequestId();
+  try {
+    const admin = await requireAdmin();
+    const service = createServiceClient();
+
+    const { data: supplier, error: supplierErr } = await service
+      .from('suppliers')
+      .select('id, name, email, tenant_id, pricing_rule:pricing_rules(*)')
+      .eq('id', supplierId)
+      .single();
+
+    if (supplierErr || !supplier) {
+      logger.warn('sendSupplierInvite supplier not found', { reqId, supplierId });
+      return fail('Supplier not found');
+    }
+
+    const email = (supplier.email ?? '').toLowerCase().trim();
+    if (!email) {
+      return fail(
+        'Add an email for this supplier (Edit) before sending an invite.',
+        'MISSING_EMAIL'
+      );
+    }
+
+    const { data: existingUser } = await service
+      .from('users')
+      .select('id')
+      .eq('supplier_id', supplierId)
+      .maybeSingle();
+    if (existingUser) {
+      return fail('This supplier already has a login.', 'ALREADY_INVITED');
+    }
+
+    const tempPassword = randomBytes(8).toString('base64url').slice(0, 12);
+
+    const { data: authUser, error: authError } = await service.auth.admin.createUser({
+      email,
+      password: tempPassword,
+      email_confirm: true,
+      app_metadata: {
+        role: 'supplier',
+        tenant_id: admin.tenant_id,
+        supplier_id: supplierId,
+        must_reset_password: true,
+      },
+    });
+
+    if (authError || !authUser.user) {
+      logger.error('sendSupplierInvite auth failed', { reqId, error: authError?.message });
+      return fail(authError?.message ?? 'Failed to create login for this supplier');
+    }
+
+    await service.from('users').upsert({
+      id: authUser.user.id,
+      tenant_id: admin.tenant_id,
+      role: 'supplier',
+      supplier_id: supplierId,
+      email,
+      must_reset_password: true,
+    });
+
+    await writeAudit('invite', 'supplier', supplierId, { email });
+
+    logger.info('sendSupplierInvite success', { reqId, supplierId });
+    revalidatePath('/admin/suppliers');
+
+    const rule = Array.isArray(supplier.pricing_rule)
+      ? supplier.pricing_rule[0]
+      : supplier.pricing_rule;
+    const formulaSummary = rule
+      ? describeFormula({
+          ma_markup1_pct: Number(rule.ma_markup1_pct) || 0,
+          ma_markup2_pct: Number(rule.ma_markup2_pct) || 0,
+          dna_markup1_pct: Number(rule.dna_markup1_pct) || 0,
+          dna_markup2_pct: Number(rule.dna_markup2_pct) || 0,
+          gst_pct: Number(rule.gst_pct) || 5,
+        })
+      : 'No formula set';
+
+    return ok({ tempPassword, formulaSummary });
+  } catch (err) {
+    logger.error('sendSupplierInvite error', { reqId, err });
+    return fail('Send invite failed');
   }
 }
 

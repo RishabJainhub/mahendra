@@ -187,7 +187,7 @@ function LabelCell({
       ]}
     >
       <Text style={styles.line1}>
-        {truncateForLabel(cleanItemNameForLabel(label.item.description), A4_DESC_MAX_CHARS)}
+        {truncateForLabel(cleanItemNameForLabel(label.item.description, companyCode), A4_DESC_MAX_CHARS)}
       </Text>
       {line2 ? <Text style={styles.line2}>{line2}</Text> : null}
       <Text style={styles.line3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
@@ -280,7 +280,7 @@ export function renderLabelRollPDF(
           >
             <View style={rollStyles.rollContent}>
               <Text style={rollStyles.rollLine1}>
-                {truncateForLabel(cleanItemNameForLabel(label.item.description), ROLL_DESC_MAX_CHARS)}
+                {truncateForLabel(cleanItemNameForLabel(label.item.description, companyCode), ROLL_DESC_MAX_CHARS)}
               </Text>
               {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
               <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>

@@ -75,6 +75,23 @@ export const SupplierInviteInputSchema = z.object({
   gst_pct: z.coerce.number().min(0).max(100).default(5),
 });
 
+/**
+ * Add a supplier WITHOUT creating a login. Email is optional here — it is only
+ * required later when "Send invite" is clicked. Same pricing fields as invite.
+ */
+export const SupplierCreateInputSchema = z.object({
+  name: z.string().min(1).max(255),
+  email: z.string().email().optional().or(z.literal('')),
+  phone: z.string().optional(),
+  code_prefix: optionalShortString,
+  code_number: optionalShortString,
+  ma_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  ma_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
+  dna_markup2_pct: z.coerce.number().min(0).max(1000).default(0),
+  gst_pct: z.coerce.number().min(0).max(100).default(5),
+});
+
 export const PricingRuleInputSchema = z.object({
   supplier_id: z.string().uuid(),
   ma_markup1_pct: z.coerce.number().min(0).max(1000).default(0),
@@ -107,6 +124,7 @@ export type BillItemInput = z.infer<typeof BillItemInputSchema>;
 export type ManualBillInput = z.infer<typeof ManualBillInputSchema>;
 export type ManualBillItem = z.infer<typeof ManualBillItemSchema>;
 export type SupplierInviteInput = z.infer<typeof SupplierInviteInputSchema>;
+export type SupplierCreateInput = z.infer<typeof SupplierCreateInputSchema>;
 export type PricingRuleInput = z.infer<typeof PricingRuleInputSchema>;
 export type SupplierUpdateInput = z.infer<typeof SupplierUpdateInputSchema>;
 
