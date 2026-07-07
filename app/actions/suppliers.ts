@@ -316,11 +316,13 @@ export async function createSupplier(
 
 /**
  * Create a login for an EXISTING supplier and return a one-time temp password.
- * The supplier must already have an email. Blocks a second invite if a login
- * already exists.
+ * If `email` is provided, the supplier's email is updated first (used when the
+ * supplier was added without an email). Blocks a second invite if a login
+ * already exists — use `regenerateSupplierPassword` for that case.
  */
 export async function sendSupplierInvite(
-  supplierId: string
+  supplierId: string,
+  email?: string
 ): Promise<ActionResult<{ tempPassword: string; formulaSummary: string }>> {
   const reqId = newRequestId();
   try {
@@ -338,12 +340,15 @@ export async function sendSupplierInvite(
       return fail('Supplier not found');
     }
 
-    const email = (supplier.email ?? '').toLowerCase().trim();
-    if (!email) {
-      return fail(
-        'Add an email for this supplier (Edit) before sending an invite.',
-        'MISSING_EMAIL'
-      );
+    const resolvedEmail = (email ?? supplier.email ?? '').toString().toLowerCase().trim();
+    if (!resolvedEmail) {
+      return fail('Enter an email for this supplier.', 'MISSING_EMAIL');
+    }
+
+    // If a new email was supplied, persist it on the supplier row so future
+    // actions (regenerate password, etc.) don't need to ask again.
+    if (email && email.trim() && email.toLowerCase().trim() !== (supplier.email ?? '').toLowerCase().trim()) {
+      await service.from('suppliers').update({ email: resolvedEmail }).eq('id', supplierId);
     }
 
     const { data: existingUser } = await service
@@ -352,13 +357,13 @@ export async function sendSupplierInvite(
       .eq('supplier_id', supplierId)
       .maybeSingle();
     if (existingUser) {
-      return fail('This supplier already has a login.', 'ALREADY_INVITED');
+      return fail('This supplier already has a login. Use "New password" instead.', 'ALREADY_INVITED');
     }
 
     const tempPassword = randomBytes(8).toString('base64url').slice(0, 12);
 
     const { data: authUser, error: authError } = await service.auth.admin.createUser({
-      email,
+      email: resolvedEmail,
       password: tempPassword,
       email_confirm: true,
       app_metadata: {
@@ -379,11 +384,11 @@ export async function sendSupplierInvite(
       tenant_id: admin.tenant_id,
       role: 'supplier',
       supplier_id: supplierId,
-      email,
+      email: resolvedEmail,
       must_reset_password: true,
     });
 
-    await writeAudit('invite', 'supplier', supplierId, { email });
+    await writeAudit('invite', 'supplier', supplierId, { email: resolvedEmail });
 
     logger.info('sendSupplierInvite success', { reqId, supplierId });
     revalidatePath('/admin/suppliers');
@@ -405,6 +410,59 @@ export async function sendSupplierInvite(
   } catch (err) {
     logger.error('sendSupplierInvite error', { reqId, err });
     return fail('Send invite failed');
+  }
+}
+
+/**
+ * Generate a fresh temp password for a supplier that already has a login.
+ * Use when the original temp password was lost or never shared. The supplier
+ * is forced to reset on next login.
+ */
+export async function regenerateSupplierPassword(
+  supplierId: string
+): Promise<ActionResult<{ tempPassword: string }>> {
+  const reqId = newRequestId();
+  try {
+    await requireAdmin();
+    const service = createServiceClient();
+
+    const { data: userRow } = await service
+      .from('users')
+      .select('id, email')
+      .eq('supplier_id', supplierId)
+      .eq('role', 'supplier')
+      .maybeSingle();
+
+    if (!userRow?.id) {
+      return fail('This supplier has no login yet. Use Invite first.', 'NO_LOGIN');
+    }
+
+    const tempPassword = randomBytes(8).toString('base64url').slice(0, 12);
+
+    const { error: updErr } = await service.auth.admin.updateUserById(userRow.id, {
+      password: tempPassword,
+      app_metadata: { must_reset_password: true },
+    });
+
+    if (updErr) {
+      logger.error('regenerateSupplierPassword auth update failed', { reqId, error: updErr.message });
+      return fail(updErr.message ?? 'Failed to set new password');
+    }
+
+    await service
+      .from('users')
+      .update({ must_reset_password: true })
+      .eq('id', userRow.id);
+
+    await writeAudit('regenerate_password', 'supplier', supplierId, {});
+
+    logger.info('regenerateSupplierPassword success', { reqId, supplierId });
+    revalidatePath('/admin/suppliers');
+
+    return ok({ tempPassword });
+  } catch (err) {
+    logger.error('regenerateSupplierPassword error', { reqId, err });
+    return fail('Password reset failed');
   }
 }
 
