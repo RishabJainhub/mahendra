@@ -1107,8 +1107,8 @@ export async function createManualBill(input: {
  * bill. The DB trigger `compute_bill_item_pricing` only runs on INSERT, so when
  * a supplier's MA/DNA markups change after a bill is imported, the stored
  * prices stay stale. This action mirrors the SQL trigger in TypeScript and
- * updates each line in place. `bills.total_amount` is left as-is to preserve
- * the original Tally invoice total.
+ * updates each line in place. `bills.total_amount` is refreshed from rate × qty
+ * line totals so the header matches the bill subtotal.
  */
 export async function recomputeBillPricing(
   id: string
@@ -1173,7 +1173,7 @@ export async function recomputeBillPricing(
       const gstAmount = (taxable * pricingRule.gst_pct) / 100;
       const cgst = round2(gstAmount / 2);
       const sgst = round2(gstAmount / 2);
-      const total = round2(taxable + gstAmount);
+      const total = round2(rate * qty);
 
       const extractedHsn = !row.hsn
         ? extractHsnFromDescription(row.name)
