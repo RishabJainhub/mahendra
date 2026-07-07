@@ -21,6 +21,14 @@ describe('cleanItemNameForLabel', () => {
     expect(cleanItemNameForLabel('2SIVAKASI LACE 228 DNA1960B')).toBe('SIVAKASI LACE');
   });
 
+  it('strips an alphabetic company code when supplied', () => {
+    expect(cleanItemNameForLabel('G-3 NT DNA4275B', 'NT')).toBe('G-3');
+    expect(cleanItemNameForLabel('S/N797 NT DNA4725B', 'NT')).toBe('S/N797');
+    expect(cleanItemNameForLabel('S/N938 NT DNA5510B', 'NT')).toBe('S/N938');
+    // Numeric-code descriptions still work when a code is passed too.
+    expect(cleanItemNameForLabel('ASHRAY 149 DNA1600B', 'NT')).toBe('ASHRAY');
+  });
+
   it('leaves names without DNA/MA sticker labels unchanged (except amount tails)', () => {
     expect(cleanItemNameForLabel('540710 HSN 5% SAREES')).toBe('540710 HSN 5% SAREES');
     expect(cleanItemNameForLabel('SIDDHARTH SILK')).toBe('SIDDHARTH SILK');

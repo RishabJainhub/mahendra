@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBulkBillStickers } from '@/app/actions/bills';
 import { createClient } from '@/lib/supabase/server';
+import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
 
 function csvField(value: string | number): string {
   const s = String(value ?? '');
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
           ? `${companyCode}(${itemHsn})`
           : companyCode || itemHsn;
         rows.push([
-          csvField(item.description),
+          csvField(cleanItemNameForLabel(item.description, companyCode)),
           csvField(codeHsn),
           csvField(stickerLabel('MA', item.ma_price)),
           csvField(stickerLabel('DNA', item.dna_price)),

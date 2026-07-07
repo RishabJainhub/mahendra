@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Pencil, UserX, UserCheck, Trash2 } from 'lucide-react';
+import { Users, Pencil, UserX, UserCheck, Trash2, Send } from 'lucide-react';
 import {
-  inviteSupplier,
+  createSupplier,
+  sendSupplierInvite,
   updateSupplier,
   deactivateSupplier,
   activateSupplier,
@@ -38,36 +39,54 @@ type Supplier = {
   code_prefix: string | null;
   code_number: string | null;
   pricing_rule?: PricingRule | null;
+  has_login?: boolean;
 };
 
 type InviteSuccess = {
+  supplierName: string;
   tempPassword: string;
   formulaSummary: string;
 };
 
 export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
-  const [showInvite, setShowInvite] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [formulaTarget, setFormulaTarget] = useState<Supplier | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<InviteSuccess | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [invitingId, setInvitingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  async function handleInvite(formData: FormData) {
+  async function handleAdd(formData: FormData) {
     setLoading(true);
     setError(null);
-    const result = await inviteSupplier(formData);
+    const result = await createSupplier(formData);
     setLoading(false);
     if (result.ok) {
+      setShowAdd(false);
+      setInviteSuccess(null);
+      setMessage('Supplier added. Use "Send invite" to give them a login.');
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function handleSendInvite(supplier: Supplier) {
+    setInvitingId(supplier.id);
+    setError(null);
+    setInviteSuccess(null);
+    const result = await sendSupplierInvite(supplier.id);
+    setInvitingId(null);
+    if (result.ok) {
       setInviteSuccess({
+        supplierName: supplier.name,
         tempPassword: result.data.tempPassword,
         formulaSummary: result.data.formulaSummary,
       });
-      setShowInvite(false);
-      setMessage('Supplier invited successfully.');
+      setMessage(`Invite sent to ${supplier.name}.`);
     } else {
       setError(result.error);
     }
@@ -139,10 +158,10 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
     <PageShell>
       <PageHeader
         title="Suppliers"
-        description="Invite suppliers and assign each a pricing formula for sticker rates."
+        description="Add suppliers and assign each a pricing formula. Send a login invite whenever you're ready."
       >
-        <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setError(null); }}>
-          Invite Supplier
+        <Button onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
+          Add Supplier
         </Button>
       </PageHeader>
 
@@ -159,7 +178,9 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
 
       {inviteSuccess && (
         <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5">
-          <p className="font-semibold text-amber-950">Supplier invited — share these details once</p>
+          <p className="font-semibold text-amber-950">
+            {inviteSuccess.supplierName} invited — share these details once
+          </p>
           <p className="mt-2 text-sm text-amber-900">Temporary password:</p>
           <code className="mt-1 block rounded-md bg-white px-3 py-2 font-mono text-sm">{inviteSuccess.tempPassword}</code>
           <p className="mt-3 text-sm text-amber-900">
@@ -181,9 +202,9 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         <EmptyState
           icon={<Users className="h-10 w-10" />}
           title="No suppliers yet"
-          description="Invite your first supplier and set their pricing formula before they import Tally bills."
-          actionLabel="Invite Supplier"
-          onAction={() => setShowInvite(true)}
+          description="Add your first supplier and set their pricing formula before importing bills."
+          actionLabel="Add Supplier"
+          onAction={() => setShowAdd(true)}
         />
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -231,6 +252,18 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                   </TD>
                   <TD>
                     <div className="flex justify-end gap-1">
+                      {!s.has_login && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => void handleSendInvite(s)}
+                          disabled={invitingId === s.id}
+                          title={s.email ? 'Create a login and generate a temp password' : 'Add an email first (Edit)'}
+                        >
+                          <Send className="mr-1 h-3.5 w-3.5" />
+                          {invitingId === s.id ? 'Sending…' : 'Send invite'}
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => { setFormulaTarget(s); setError(null); }}>
                         Formula
                       </Button>
@@ -288,25 +321,28 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         </Modal>
       )}
 
-      {showInvite && (
-        <Modal title="Invite Supplier" onClose={() => setShowInvite(false)}>
-          <form action={handleInvite} className="space-y-4">
+      {showAdd && (
+        <Modal title="Add Supplier" onClose={() => setShowAdd(false)}>
+          <form action={handleAdd} className="space-y-4">
             <div>
-              <Label htmlFor="invite-name">Name</Label>
-              <Input id="invite-name" name="name" placeholder="Company name" required />
+              <Label htmlFor="add-name">Name</Label>
+              <Input id="add-name" name="name" placeholder="Company name" required />
             </div>
             <div>
-              <Label htmlFor="invite-email">Email</Label>
-              <Input id="invite-email" name="email" type="email" placeholder="supplier@example.com" required />
+              <Label htmlFor="add-email">Email</Label>
+              <Input id="add-email" name="email" type="email" placeholder="supplier@example.com (optional)" />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Optional now. Required later only when you click “Send invite” to create their login.
+              </p>
             </div>
             <div>
-              <Label htmlFor="invite-phone">Phone</Label>
-              <Input id="invite-phone" name="phone" placeholder="Optional" />
+              <Label htmlFor="add-phone">Phone</Label>
+              <Input id="add-phone" name="phone" placeholder="Optional" />
             </div>
             <div>
-              <Label htmlFor="invite-company-code">Company code</Label>
+              <Label htmlFor="add-company-code">Company code</Label>
               <Input
-                id="invite-company-code"
+                id="add-company-code"
                 name="code_prefix"
                 placeholder="e.g. 000"
                 maxLength={16}
@@ -317,8 +353,8 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
             </div>
             <PricingRuleFields />
             <div className="flex gap-2 pt-2">
-              <Button type="submit" disabled={loading}>{loading ? 'Inviting…' : 'Send Invite'}</Button>
-              <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
+              <Button type="submit" disabled={loading}>{loading ? 'Adding…' : 'Add supplier'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             </div>
           </form>
         </Modal>
