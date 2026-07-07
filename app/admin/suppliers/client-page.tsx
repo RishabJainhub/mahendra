@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Pencil, UserX, UserCheck, Trash2, Send } from 'lucide-react';
+import { Users, Pencil, UserX, UserCheck, Trash2, Send, KeyRound } from 'lucide-react';
 import {
   createSupplier,
-  inviteSupplier,
   sendSupplierInvite,
+  regenerateSupplierPassword,
   updateSupplier,
   deactivateSupplier,
   activateSupplier,
@@ -51,7 +51,6 @@ type InviteSuccess = {
 
 export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [showInvite, setShowInvite] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [formulaTarget, setFormulaTarget] = useState<Supplier | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<InviteSuccess | null>(null);
@@ -59,6 +58,10 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [invitingId, setInvitingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [emailPrompt, setEmailPrompt] = useState<Supplier | null>(null);
+  const [promptEmail, setPromptEmail] = useState('');
+  const [prompting, setPrompting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -70,35 +73,31 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
     if (result.ok) {
       setShowAdd(false);
       setInviteSuccess(null);
-      setMessage('Supplier added. Use "Send invite" to give them a login.');
+      setMessage('Supplier added. Click "Invite" on their row to send a login.');
     } else {
       setError(result.error);
     }
   }
 
-  async function handleInvite(formData: FormData) {
-    setLoading(true);
-    setError(null);
-    const result = await inviteSupplier(formData);
-    setLoading(false);
-    if (result.ok) {
-      setInviteSuccess({
-        supplierName: String(formData.get('name') ?? 'Supplier'),
-        tempPassword: result.data.tempPassword,
-        formulaSummary: result.data.formulaSummary,
-      });
-      setShowInvite(false);
-      setMessage('Supplier invited successfully.');
+  /**
+   * Per-row Invite. If the supplier already has an email, send the invite
+   * immediately. Otherwise open a small prompt to capture an email first.
+   */
+  async function handleInviteClick(supplier: Supplier) {
+    if (supplier.email && supplier.email.trim()) {
+      await runInvite(supplier, supplier.email.trim());
     } else {
-      setError(result.error);
+      setPromptEmail('');
+      setEmailPrompt(supplier);
+      setError(null);
     }
   }
 
-  async function handleSendInvite(supplier: Supplier) {
+  async function runInvite(supplier: Supplier, email: string) {
     setInvitingId(supplier.id);
     setError(null);
     setInviteSuccess(null);
-    const result = await sendSupplierInvite(supplier.id);
+    const result = await sendSupplierInvite(supplier.id, email);
     setInvitingId(null);
     if (result.ok) {
       setInviteSuccess({
@@ -106,7 +105,39 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         tempPassword: result.data.tempPassword,
         formulaSummary: result.data.formulaSummary,
       });
+      setEmailPrompt(null);
       setMessage(`Invite sent to ${supplier.name}.`);
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function submitEmailPrompt(e: React.FormEvent) {
+    e.preventDefault();
+    if (!emailPrompt) return;
+    const email = promptEmail.trim();
+    if (!email) {
+      setError('Enter an email address.');
+      return;
+    }
+    setPrompting(true);
+    await runInvite(emailPrompt, email);
+    setPrompting(false);
+  }
+
+  async function handleNewPassword(supplier: Supplier) {
+    setResettingId(supplier.id);
+    setError(null);
+    setInviteSuccess(null);
+    const result = await regenerateSupplierPassword(supplier.id);
+    setResettingId(null);
+    if (result.ok) {
+      setInviteSuccess({
+        supplierName: supplier.name,
+        tempPassword: result.data.tempPassword,
+        formulaSummary: 'New temporary password generated. The old one no longer works.',
+      });
+      setMessage(`New password generated for ${supplier.name}.`);
     } else {
       setError(result.error);
     }
@@ -178,13 +209,10 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
     <PageShell>
       <PageHeader
         title="Suppliers"
-        description="Add suppliers and assign each a pricing formula. Send a login invite whenever you're ready."
+        description="Add suppliers and assign each a pricing formula. Click Invite on a supplier's row to send a login."
       >
-        <Button variant="outline" onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
+        <Button onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
           Add Supplier
-        </Button>
-        <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setError(null); }}>
-          Invite Supplier
         </Button>
       </PageHeader>
 
@@ -225,9 +253,9 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         <EmptyState
           icon={<Users className="h-10 w-10" />}
           title="No suppliers yet"
-          description="Add a supplier (no login) or invite one with a login and pricing formula."
-          actionLabel="Invite Supplier"
-          onAction={() => setShowInvite(true)}
+          description="Add your first supplier and set their pricing formula. Click Invite on their row to send a login."
+          actionLabel="Add Supplier"
+          onAction={() => setShowAdd(true)}
         />
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -279,12 +307,24 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                         <Button
                           size="sm"
                           variant="default"
-                          onClick={() => void handleSendInvite(s)}
+                          onClick={() => void handleInviteClick(s)}
                           disabled={invitingId === s.id}
-                          title={s.email ? 'Create a login and generate a temp password' : 'Add an email first (Edit)'}
+                          title={s.email ? 'Create a login and generate a temp password' : 'Add an email, then create a login'}
                         >
                           <Send className="mr-1 h-3.5 w-3.5" />
-                          {invitingId === s.id ? 'Sending…' : 'Send invite'}
+                          {invitingId === s.id ? 'Inviting…' : 'Invite'}
+                        </Button>
+                      )}
+                      {s.has_login && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleNewPassword(s)}
+                          disabled={resettingId === s.id}
+                          title="Generate a new temporary password (the old one stops working)"
+                        >
+                          <KeyRound className="mr-1 h-3.5 w-3.5" />
+                          {resettingId === s.id ? 'Resetting…' : 'New password'}
                         </Button>
                       )}
                       <Button size="sm" variant="outline" onClick={() => { setFormulaTarget(s); setError(null); }}>
@@ -383,37 +423,29 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         </Modal>
       )}
 
-      {showInvite && (
-        <Modal title="Invite Supplier" onClose={() => setShowInvite(false)}>
-          <form action={handleInvite} className="space-y-4">
+      {emailPrompt && (
+        <Modal title={`Invite — ${emailPrompt.name}`} onClose={() => setEmailPrompt(null)}>
+          <form onSubmit={submitEmailPrompt} className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This supplier has no email yet. Enter one to create their login and generate a temporary password.
+            </p>
             <div>
-              <Label htmlFor="invite-name">Name</Label>
-              <Input id="invite-name" name="name" placeholder="Company name" required />
-            </div>
-            <div>
-              <Label htmlFor="invite-email">Email</Label>
-              <Input id="invite-email" name="email" type="email" placeholder="supplier@example.com" required />
-            </div>
-            <div>
-              <Label htmlFor="invite-phone">Phone</Label>
-              <Input id="invite-phone" name="phone" placeholder="Optional" />
-            </div>
-            <div>
-              <Label htmlFor="invite-company-code">Company code</Label>
+              <Label htmlFor="prompt-email">Email</Label>
               <Input
-                id="invite-company-code"
-                name="code_prefix"
-                placeholder="e.g. 000"
-                maxLength={16}
+                id="prompt-email"
+                type="email"
+                placeholder="supplier@example.com"
+                value={promptEmail}
+                onChange={(e) => setPromptEmail(e.target.value)}
+                autoFocus
+                required
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                A short code you assign to this supplier. Appears on labels next to the line-item HSN.
-              </p>
             </div>
-            <PricingRuleFields />
             <div className="flex gap-2 pt-2">
-              <Button type="submit" disabled={loading}>{loading ? 'Inviting…' : 'Send Invite'}</Button>
-              <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
+              <Button type="submit" disabled={prompting}>
+                {prompting ? 'Inviting…' : 'Send invite'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setEmailPrompt(null)}>Cancel</Button>
             </div>
           </form>
         </Modal>
