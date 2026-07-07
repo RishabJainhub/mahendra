@@ -209,7 +209,7 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
     <PageShell>
       <PageHeader
         title="Suppliers"
-        description="Add suppliers and assign each a pricing formula. Click Invite on a supplier's row to send a login."
+        description="Add a supplier, then click Invite on their row to send a login. Suppliers that already have a login show New password instead."
       >
         <Button onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
           Add Supplier
