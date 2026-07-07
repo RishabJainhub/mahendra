@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Users, Pencil, UserX, UserCheck, Trash2, Send } from 'lucide-react';
 import {
   createSupplier,
+  inviteSupplier,
   sendSupplierInvite,
   updateSupplier,
   deactivateSupplier,
@@ -50,6 +51,7 @@ type InviteSuccess = {
 
 export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [formulaTarget, setFormulaTarget] = useState<Supplier | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState<InviteSuccess | null>(null);
@@ -69,6 +71,24 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
       setShowAdd(false);
       setInviteSuccess(null);
       setMessage('Supplier added. Use "Send invite" to give them a login.');
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function handleInvite(formData: FormData) {
+    setLoading(true);
+    setError(null);
+    const result = await inviteSupplier(formData);
+    setLoading(false);
+    if (result.ok) {
+      setInviteSuccess({
+        supplierName: String(formData.get('name') ?? 'Supplier'),
+        tempPassword: result.data.tempPassword,
+        formulaSummary: result.data.formulaSummary,
+      });
+      setShowInvite(false);
+      setMessage('Supplier invited successfully.');
     } else {
       setError(result.error);
     }
@@ -160,8 +180,11 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         title="Suppliers"
         description="Add suppliers and assign each a pricing formula. Send a login invite whenever you're ready."
       >
-        <Button onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
+        <Button variant="outline" onClick={() => { setShowAdd(true); setInviteSuccess(null); setError(null); }}>
           Add Supplier
+        </Button>
+        <Button onClick={() => { setShowInvite(true); setInviteSuccess(null); setError(null); }}>
+          Invite Supplier
         </Button>
       </PageHeader>
 
@@ -202,9 +225,9 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
         <EmptyState
           icon={<Users className="h-10 w-10" />}
           title="No suppliers yet"
-          description="Add your first supplier and set their pricing formula before importing bills."
-          actionLabel="Add Supplier"
-          onAction={() => setShowAdd(true)}
+          description="Add a supplier (no login) or invite one with a login and pricing formula."
+          actionLabel="Invite Supplier"
+          onAction={() => setShowInvite(true)}
         />
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -355,6 +378,42 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={loading}>{loading ? 'Adding…' : 'Add supplier'}</Button>
               <Button type="button" variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {showInvite && (
+        <Modal title="Invite Supplier" onClose={() => setShowInvite(false)}>
+          <form action={handleInvite} className="space-y-4">
+            <div>
+              <Label htmlFor="invite-name">Name</Label>
+              <Input id="invite-name" name="name" placeholder="Company name" required />
+            </div>
+            <div>
+              <Label htmlFor="invite-email">Email</Label>
+              <Input id="invite-email" name="email" type="email" placeholder="supplier@example.com" required />
+            </div>
+            <div>
+              <Label htmlFor="invite-phone">Phone</Label>
+              <Input id="invite-phone" name="phone" placeholder="Optional" />
+            </div>
+            <div>
+              <Label htmlFor="invite-company-code">Company code</Label>
+              <Input
+                id="invite-company-code"
+                name="code_prefix"
+                placeholder="e.g. 000"
+                maxLength={16}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                A short code you assign to this supplier. Appears on labels next to the line-item HSN.
+              </p>
+            </div>
+            <PricingRuleFields />
+            <div className="flex gap-2 pt-2">
+              <Button type="submit" disabled={loading}>{loading ? 'Inviting…' : 'Send Invite'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
             </div>
           </form>
         </Modal>
