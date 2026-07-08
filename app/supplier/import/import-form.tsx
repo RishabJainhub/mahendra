@@ -5,29 +5,26 @@ import { importTallyBill, previewTallyBill } from '@/app/actions/bills';
 import { getSupplierDefaultImportFormat, saveSupplierDefaultImportFormat } from '@/app/actions/supplier-defaults';
 import { Button } from '@/components/ui/button';
 import { ButtonLink } from '@/components/ui/button-link';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/field';
-import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
+import { BillPrintModal } from '@/components/pdf/bill-print-modal';
+import { FileDropZone } from '@/components/tally/file-drop-zone';
 import { formatINR } from '@/lib/pricing';
 import { TallyImportHelp } from '@/components/tally/import-help';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
-import { arrayBufferToBase64 } from '@/lib/file-utils';
 import {
-  uploadTallyFileToStorage,
-  deleteTallyUploadFromClient,
-  TALLY_INLINE_MAX_BYTES,
-} from '@/lib/tally/upload';
-import { FileInput, Upload, CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, X } from 'lucide-react';
+  prepareImportFile,
+  isSpreadsheet,
+  detectImportFileType,
+  type PreparedImportFile,
+} from '@/lib/tally/prepare-file';
+import { deleteTallyUploadFromClient } from '@/lib/tally/upload';
+import { FileInput, Printer, CheckCircle2, AlertTriangle, ExternalLink, RefreshCw, X } from 'lucide-react';
 
 type DuplicateBill = {
   existingBillId: string;
   billNumber: string;
-  supplierName: string;
 };
-
-type FileType = 'xml' | 'xlsx' | 'xls' | 'csv' | 'pdf';
 
 type Props = {
   mappings: { id: string; name: string }[];
@@ -36,29 +33,40 @@ type Props = {
 
 type PreviewItem = { sku: string; name: string; qty: number; rate: number };
 
-function detectFileType(fileName: string): FileType {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith('.xml')) return 'xml';
-  if (lower.endsWith('.pdf')) return 'pdf';
-  if (lower.endsWith('.csv')) return 'csv';
-  if (lower.endsWith('.xls')) return 'xls';
-  return 'xlsx';
+type QueueStatus = 'pending' | 'processing' | 'imported' | 'replaced' | 'duplicate' | 'error' | 'skipped';
+
+type QueueItem = {
+  key: string;
+  file: File;
+  status: QueueStatus;
+  detail?: string;
+  billId?: string;
+};
+
+function isColumnDetectError(msg: string): boolean {
+  return /column|spreadsheet|header/i.test(msg);
 }
 
-type PreparedFile =
-  | { fileName: string; fileType: FileType; fileContent: string; mappingId?: string; storagePath?: string }
-  | { fileName: string; fileType: FileType; fileContent?: string; storagePath: string; mappingId?: string };
-
 export function ImportForm({ mappings, supplierId }: Props) {
+  const [mappingId, setMappingId] = useState(mappings[0]?.id ?? DEFAULT_TALLY_MAPPING_ID);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const [preview, setPreview] = useState<PreviewItem[] | null>(null);
   const [billMeta, setBillMeta] = useState<{ number: string; date: string; party: string; total: number } | null>(null);
-  const [fileData, setFileData] = useState<PreparedFile | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [fileData, setFileData] = useState<PreparedImportFile | null>(null);
+  const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
+
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [queueRunning, setQueueRunning] = useState(false);
+
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [duplicate, setDuplicate] = useState<DuplicateBill | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [saveAsDefault, setSaveAsDefault] = useState(true);
+  const [lastImportedBillId, setLastImportedBillId] = useState<string | null>(null);
+  const [printBillId, setPrintBillId] = useState<string | null>(null);
 
   // Load this supplier's saved default import format on mount.
   useEffect(() => {
@@ -67,87 +75,74 @@ export function ImportForm({ mappings, supplierId }: Props) {
     (async () => {
       const result = await getSupplierDefaultImportFormat(supplierId);
       if (cancelled || !result.ok || !result.data) return;
-      if (result.data.mapping_id) {
-        const el = document.getElementById('mapping_id') as HTMLSelectElement | null;
-        if (el) el.value = result.data.mapping_id;
-      }
+      if (result.data.mapping_id) setMappingId(result.data.mapping_id);
     })();
     return () => { cancelled = true; };
   }, [supplierId]);
 
-  // Clean up any pending Storage upload when the component unmounts.
+  // Clean up a pending Storage upload when the component unmounts.
   useEffect(() => {
     return () => {
-      const pending = fileData;
-      if (pending && 'storagePath' in pending && pending.storagePath) {
-        void deleteTallyUploadFromClient(pending.storagePath);
-      }
+      if (fileData?.storagePath) void deleteTallyUploadFromClient(fileData.storagePath);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  function resetMessages() {
     setMessage(null);
     setError(null);
     setDuplicate(null);
+    setLastImportedBillId(null);
+  }
+
+  function updateQueueItem(key: string, patch: Partial<QueueItem>) {
+    setQueue((q) => q.map((item) => (item.key === key ? { ...item, ...patch } : item)));
+  }
+
+  async function handleFiles(files: File[]) {
+    resetMessages();
+    if (files.length === 1) {
+      await previewSingleFile(files[0]);
+    } else {
+      await runQueue(files);
+    }
+  }
+
+  // ---------- Single file: preview → confirm → print ----------
+
+  async function previewSingleFile(file: File) {
     setLoading(true);
     setUploadProgress(null);
-
-    const fileType = detectFileType(file.name);
-    const mappingEl = document.getElementById('mapping_id') as HTMLSelectElement | null;
-    const mappingId =
-      fileType === 'pdf' || fileType === 'xml'
-        ? undefined
-        : mappingEl?.value || mappings[0]?.id || DEFAULT_TALLY_MAPPING_ID;
-
+    setQueue([]);
     try {
-      // Delete any previous pending upload so the bucket only ever holds the
-      // currently-previewed file.
-      const prev = fileData;
-      if (prev && 'storagePath' in prev && prev.storagePath) {
-        void deleteTallyUploadFromClient(prev.storagePath);
-      }
+      if (fileData?.storagePath) void deleteTallyUploadFromClient(fileData.storagePath);
 
-      let prepared: PreparedFile;
-      if (file.size > TALLY_INLINE_MAX_BYTES) {
-        setUploadProgress(
-          `Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB to secure storage…`
-        );
-        const { path } = await uploadTallyFileToStorage(file);
-        setUploadProgress('Reading file…');
-        prepared = { fileName: file.name, fileType, storagePath: path, mappingId };
-      } else {
-        setUploadProgress('Reading file…');
-        const fileContent =
-          fileType === 'xml'
-            ? await file.text()
-            : arrayBufferToBase64(await file.arrayBuffer());
-        prepared = { fileName: file.name, fileType, fileContent, mappingId };
-      }
-
+      const prepared = await prepareImportFile(file, mappingId, setUploadProgress);
       const result = await previewTallyBill(prepared);
 
       if (!result.ok) {
-        setError(result.error);
+        setError(
+          isColumnDetectError(result.error) && isSpreadsheet(detectImportFileType(file.name))
+            ? `${result.error} — pick a column mapping under Advanced and re-select the file.`
+            : result.error
+        );
+        if (isColumnDetectError(result.error)) setShowAdvanced(true);
         setPreview(null);
         setBillMeta(null);
-        // Roll back the upload if preview failed.
-        if ('storagePath' in prepared && prepared.storagePath) {
-          void deleteTallyUploadFromClient(prepared.storagePath);
-        }
+        if (prepared.storagePath) void deleteTallyUploadFromClient(prepared.storagePath);
         setFileData(null);
+        setPendingFile(null);
         return;
       }
 
       setPreview(result.data.items);
       setBillMeta(result.data.bill);
       setFileData(prepared);
+      setPendingFile(file);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read this file.');
       setFileData(null);
+      setPendingFile(null);
     } finally {
       setLoading(false);
       setUploadProgress(null);
@@ -155,61 +150,134 @@ export function ImportForm({ mappings, supplierId }: Props) {
   }
 
   async function runImport(replaceExisting: boolean) {
-    if (!fileData) return;
+    if (!fileData || !pendingFile) return;
     setLoading(true);
     setError(null);
-    const result = await importTallyBill({ ...fileData, replaceExisting });
+
+    // The server frees the Storage object after every attempt, so a retry
+    // (replace after duplicate) must re-prepare from the original File.
+    let payload = fileData;
+    if (replaceExisting && fileData.storagePath) {
+      try {
+        payload = await prepareImportFile(pendingFile, fileData.mappingId, setUploadProgress);
+      } catch (err) {
+        setLoading(false);
+        setError(err instanceof Error ? err.message : 'Could not re-upload the file.');
+        return;
+      }
+    }
+
+    const result = await importTallyBill({ ...payload, replaceExisting });
     setLoading(false);
+    setUploadProgress(null);
+
     if (result.ok) {
       setMessage(
         result.data.replaced
-          ? `Replaced existing bill — imported ${result.data.itemCount} items`
-          : `Imported ${result.data.itemCount} items successfully`
+          ? `Replaced existing bill — imported ${result.data.itemCount} items.`
+          : `Imported ${result.data.itemCount} items successfully.`
       );
       if (saveAsDefault && supplierId) {
-        const saveResult = await saveSupplierDefaultImportFormat({
+        void saveSupplierDefaultImportFormat({
           supplierId,
           fileType: fileData.fileType,
           mappingId: fileData.mappingId ?? '',
         });
-        if (saveResult.ok) {
-          setMessage((prev) => `${prev} · Saved as your default ${fileData.fileType.toUpperCase()} format`);
-        }
       }
+      setLastImportedBillId(result.data.billId);
       setPreview(null);
       setBillMeta(null);
       setFileData(null);
+      setPendingFile(null);
       setDuplicate(null);
     } else if (result.code === 'DUPLICATE_BILL' && result.meta?.existingBillId) {
       setDuplicate({
         existingBillId: String(result.meta.existingBillId),
         billNumber: String(result.meta.billNumber ?? billMeta?.number ?? ''),
-        supplierName: String(result.meta.supplierName ?? ''),
       });
     } else {
       setError(result.error);
     }
   }
 
-  function handleConfirm() {
-    setDuplicate(null);
-    void runImport(false);
+  // ---------- Multi-file queue: auto-import each ----------
+
+  async function runQueue(files: File[]) {
+    const items: QueueItem[] = files.map((file, i) => ({
+      key: `${Date.now()}-${i}-${file.name}`,
+      file,
+      status: 'pending',
+    }));
+    setQueue(items);
+    setPreview(null);
+    setBillMeta(null);
+    setFileData(null);
+    setPendingFile(null);
+    setQueueRunning(true);
+
+    for (const item of items) {
+      await processQueueItem(item, false);
+    }
+    setQueueRunning(false);
   }
 
-  function handleReplace() {
-    void runImport(true);
+  async function processQueueItem(item: QueueItem, replaceExisting: boolean) {
+    updateQueueItem(item.key, { status: 'processing', detail: 'Reading…' });
+    let prepared: PreparedImportFile | null = null;
+    try {
+      prepared = await prepareImportFile(item.file, mappingId, (msg) =>
+        updateQueueItem(item.key, { detail: msg })
+      );
+
+      updateQueueItem(item.key, { detail: 'Importing…' });
+      const result = await importTallyBill({ ...prepared, replaceExisting });
+
+      if (result.ok) {
+        updateQueueItem(item.key, {
+          status: result.data.replaced ? 'replaced' : 'imported',
+          detail: `${result.data.itemCount} items`,
+          billId: result.data.billId,
+        });
+        if (saveAsDefault && supplierId) {
+          void saveSupplierDefaultImportFormat({
+            supplierId,
+            fileType: prepared.fileType,
+            mappingId: prepared.mappingId ?? '',
+          });
+        }
+      } else if (result.code === 'DUPLICATE_BILL') {
+        updateQueueItem(item.key, {
+          status: 'duplicate',
+          detail: `Bill ${String(result.meta?.billNumber ?? '')} already exists.`,
+        });
+      } else {
+        updateQueueItem(item.key, { status: 'error', detail: result.error });
+      }
+    } catch (err) {
+      if (prepared?.storagePath) void deleteTallyUploadFromClient(prepared.storagePath);
+      updateQueueItem(item.key, {
+        status: 'error',
+        detail: err instanceof Error ? err.message : 'Failed to process this file.',
+      });
+    }
   }
 
-  const showMapping = !fileData || fileData.fileType === 'xlsx' || fileData.fileType === 'xls' || fileData.fileType === 'csv';
+  const importedCount = queue.filter((q) => q.status === 'imported' || q.status === 'replaced').length;
 
   return (
     <div className="max-w-3xl space-y-6">
       <TallyImportHelp />
 
       {message && (
-        <div className="flex items-start gap-2 rounded-md border border-l-4 border-l-primary border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-l-4 border-l-primary border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
           <span>{message}</span>
+          {lastImportedBillId && (
+            <Button size="sm" onClick={() => setPrintBillId(lastImportedBillId)} className="ml-auto">
+              <Printer className="mr-1.5 h-4 w-4" />
+              Print labels now
+            </Button>
+          )}
         </div>
       )}
       {error && (
@@ -233,7 +301,7 @@ export function ImportForm({ mappings, supplierId }: Props) {
               <ExternalLink className="mr-1.5 h-4 w-4" />
               Open existing bill
             </ButtonLink>
-            <Button type="button" variant="destructive" size="sm" onClick={handleReplace} disabled={loading}>
+            <Button type="button" variant="destructive" size="sm" onClick={() => { setDuplicate(null); void runImport(true); }} disabled={loading}>
               <RefreshCw className="mr-1.5 h-4 w-4" />
               {loading ? 'Replacing…' : 'Replace existing'}
             </Button>
@@ -248,35 +316,43 @@ export function ImportForm({ mappings, supplierId }: Props) {
       <Card>
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Upload className="h-4 w-4 text-muted-foreground" />
-            Upload Tally file
+            <FileInput className="h-4 w-4 text-muted-foreground" />
+            Upload bill files
           </CardTitle>
-          <CardDescription>Choose a PDF, XML, or Excel export from TallyPrime.</CardDescription>
+          <CardDescription>
+            PDF, XML, Excel, or CSV exports. Columns are detected automatically.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {showMapping && (
-            <div className="space-y-1.5">
-              <Label htmlFor="mapping_id" className="text-xs font-medium text-muted-foreground">Column Mapping</Label>
-              <Select id="mapping_id" defaultValue={mappings[0]?.id ?? DEFAULT_TALLY_MAPPING_ID}>
+          <FileDropZone onFiles={(files) => void handleFiles(files)} disabled={loading || queueRunning} />
+
+          <details
+            open={showAdvanced}
+            onToggle={(e) => setShowAdvanced((e.target as HTMLDetailsElement).open)}
+            className="rounded-md border px-4 py-3"
+          >
+            <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+              Advanced — column mapping (only for spreadsheets auto-detect can&apos;t read)
+            </summary>
+            <div className="mt-3">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Excel/CSV columns are detected automatically from the header row. If detection
+                fails, pick a saved mapping here and re-select the file. PDFs and XML never use this.
+              </p>
+              <select
+                value={mappingId}
+                onChange={(e) => setMappingId(e.target.value)}
+                className="h-10 w-full rounded-md border px-3 text-sm"
+              >
                 {mappings.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                   </option>
                 ))}
-              </Select>
+              </select>
             </div>
-          )}
-          <div className="space-y-1.5">
-            <Label htmlFor="tally_file" className="text-xs font-medium text-muted-foreground">Tally File</Label>
-            <input
-              id="tally_file"
-              type="file"
-              accept=".xml,.xlsx,.xls,.csv,.pdf,application/pdf,text/csv"
-              onChange={handleFileChange}
-              className="block w-full text-sm text-slate-950 file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
-            />
-            <p className="text-xs text-muted-foreground">PDF, XML, Excel (.xlsx / .xls), or CSV. Files up to 50 MB are uploaded to secure storage.</p>
-          </div>
+          </details>
+
           {loading && (
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="h-4 w-4 animate-spin" />
@@ -285,6 +361,83 @@ export function ImportForm({ mappings, supplierId }: Props) {
           )}
         </CardContent>
       </Card>
+
+      {queue.length > 0 && (
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">
+              Importing {queue.length} files
+              {!queueRunning && ` — ${importedCount} imported`}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ul className="divide-y">
+              {queue.map((item) => (
+                <li key={item.key} className="flex flex-wrap items-center gap-2 px-6 py-2.5 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-medium">{item.file.name}</span>
+                  {item.status === 'pending' && <span className="text-xs text-muted-foreground">Waiting…</span>}
+                  {item.status === 'processing' && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      {item.detail}
+                    </span>
+                  )}
+                  {(item.status === 'imported' || item.status === 'replaced') && (
+                    <>
+                      <span className="flex items-center gap-1.5 text-xs text-green-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {item.status === 'replaced' ? 'Replaced' : 'Imported'} · {item.detail}
+                      </span>
+                      {item.billId && (
+                        <Button size="sm" variant="outline" onClick={() => setPrintBillId(item.billId!)}>
+                          <Printer className="mr-1 h-3.5 w-3.5" />
+                          Print
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {item.status === 'duplicate' && (
+                    <>
+                      <span className="flex items-center gap-1.5 text-xs text-amber-700">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        {item.detail}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={queueRunning}
+                        onClick={() => void processQueueItem(item, true)}
+                      >
+                        Replace
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={queueRunning}
+                        onClick={() => updateQueueItem(item.key, { status: 'skipped', detail: 'Skipped' })}
+                      >
+                        Skip
+                      </Button>
+                    </>
+                  )}
+                  {item.status === 'skipped' && (
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <X className="h-3.5 w-3.5" />
+                      Skipped
+                    </span>
+                  )}
+                  {item.status === 'error' && (
+                    <span className="flex items-center gap-1.5 text-xs text-destructive">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {item.detail}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {preview && billMeta && (
         <Card>
@@ -327,8 +480,8 @@ export function ImportForm({ mappings, supplierId }: Props) {
                 </TBody>
               </Table>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleConfirm} disabled={loading}>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={() => { setDuplicate(null); void runImport(false); }} disabled={loading}>
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
                 Confirm Import
               </Button>
@@ -344,6 +497,10 @@ export function ImportForm({ mappings, supplierId }: Props) {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {printBillId && (
+        <BillPrintModal billId={printBillId} onClose={() => setPrintBillId(null)} />
       )}
     </div>
   );
