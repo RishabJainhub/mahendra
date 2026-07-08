@@ -27,6 +27,7 @@ export type BillFilters = {
   supplierId?: string;
   from?: string;
   to?: string;
+  search?: string;
   page?: number;
   pageSize?: number;
 };
@@ -51,6 +52,9 @@ export async function getBills(filters: BillFilters = {}) {
     if (filters.supplierId) query = query.eq('supplier_id', filters.supplierId);
     if (filters.from) query = query.gte('bill_date', filters.from);
     if (filters.to) query = query.lte('bill_date', filters.to);
+    if (filters.search?.trim()) {
+      query = query.ilike('bill_number', `%${filters.search.trim()}%`);
+    }
 
     const { data, error, count } = await query;
     if (error) {
@@ -357,6 +361,40 @@ export async function markBillsPrinted(billIds: string[]): Promise<ActionResult<
   } catch (err) {
     logger.error('markBillsPrinted error', { reqId, err });
     return fail('Mark printed failed');
+  }
+}
+
+/**
+ * Undo for mark-printed: flips bills back to 'imported' so they re-appear in
+ * the unprinted queue. Only touches bills currently in 'printed' status.
+ */
+export async function unmarkBillsPrinted(billIds: string[]): Promise<ActionResult<{ count: number }>> {
+  const reqId = newRequestId();
+  try {
+    await requireUser();
+    if (billIds.length === 0) return ok({ count: 0 });
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('bills')
+      .update({ status: 'imported' })
+      .in('id', billIds)
+      .eq('status', 'printed');
+
+    if (error) {
+      logger.error('unmarkBillsPrinted failed', { reqId, error: error.message });
+      return fail(error.message);
+    }
+
+    revalidatePath('/admin/bills');
+    revalidatePath('/admin/print');
+    revalidatePath('/supplier');
+    revalidatePath('/supplier/bills');
+    logger.info('unmarkBillsPrinted success', { reqId, count: billIds.length });
+    return ok({ count: billIds.length });
+  } catch (err) {
+    logger.error('unmarkBillsPrinted error', { reqId, err });
+    return fail('Undo failed');
   }
 }
 

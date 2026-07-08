@@ -11,6 +11,10 @@ type ToastOptions = {
   title?: string;
   description?: string;
   variant?: ToastVariant;
+  /** Optional action button (e.g. Undo). The toast closes after the click. */
+  action?: { label: string; onClick: () => void | Promise<void> };
+  /** Auto-dismiss delay in ms. Defaults to 4000 (6000 when an action is present). */
+  duration?: number;
 };
 
 type ToastItem = ToastOptions & {
@@ -41,7 +45,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (opts: ToastOptions) => {
       const id = ++idRef.current;
       setToasts((prev) => [...prev, { ...opts, id }]);
-      window.setTimeout(() => remove(id), 4000);
+      const duration = opts.duration ?? (opts.action ? 6000 : 4000);
+      window.setTimeout(() => remove(id), duration);
     },
     [remove]
   );
@@ -84,6 +89,18 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 {t.title && <div className="text-sm font-medium text-foreground">{t.title}</div>}
                 {t.description && (
                   <div className="text-sm text-muted-foreground">{t.description}</div>
+                )}
+                {t.action && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void t.action?.onClick();
+                      remove(t.id);
+                    }}
+                    className="mt-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-accent"
+                  >
+                    {t.action.label}
+                  </button>
                 )}
               </motion.div>
             );

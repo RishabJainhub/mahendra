@@ -1,17 +1,27 @@
 import { notFound } from 'next/navigation';
-import { getBill, cancelBillAction } from '@/app/actions/bills';
+import { getBill } from '@/app/actions/bills';
 import { formatINR } from '@/lib/pricing';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, THead, TBody, TR, TH, TD, TFoot } from '@/components/ui/table';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { ButtonLink } from '@/components/ui/button-link';
 import { BillStatusBadge } from '@/components/bills/bill-status-badge';
 import { ReprintButton } from './reprint-button';
-import { RecomputeButton } from './recompute-button';
-import { DeleteBillButton } from './delete-button';
+import { BillActionsMenu } from './bill-actions-menu';
 import { requireAdmin } from '@/lib/auth';
-import { ArrowLeft, Pencil, RefreshCw, Printer, Ban, ClipboardList, IndianRupee } from 'lucide-react';
+import { ArrowLeft, Pencil, ClipboardList, IndianRupee } from 'lucide-react';
+
+/** Friendly labels for raw audit-trail action names. */
+const AUDIT_LABELS: Record<string, string> = {
+  import: 'Imported',
+  manual_edit: 'Edited manually',
+  manual_create: 'Created manually',
+  recompute_pricing: 'Pricing refreshed',
+  print: 'Printed',
+  cancel: 'Cancelled',
+  delete: 'Deleted',
+  create: 'Created',
+};
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -48,17 +58,8 @@ export default async function AdminBillDetailPage({ params }: Props) {
           <Pencil className="mr-1.5 h-4 w-4" />
           Edit
         </ButtonLink>
-        <RecomputeButton billId={id} />
         <ReprintButton billId={id} />
-        {bill.status !== 'cancelled' && (
-          <form action={cancelBillAction.bind(null, id)}>
-            <Button type="submit" variant="outline">
-              <Ban className="mr-1.5 h-4 w-4" />
-              Cancel
-            </Button>
-          </form>
-        )}
-        <DeleteBillButton billId={id} billNumber={bill.bill_number} redirectTo="/admin/bills" />
+        <BillActionsMenu billId={id} billNumber={bill.bill_number} status={bill.status} />
       </PageHeader>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -134,7 +135,7 @@ export default async function AdminBillDetailPage({ params }: Props) {
           <CardContent className="space-y-2">
             {bill.audit.map((entry: { id: string; action: string; created_at: string }) => (
               <div key={entry.id} className="flex items-center justify-between rounded-md border bg-muted/20 px-4 py-2 text-sm">
-                <span className="font-medium">{entry.action}</span>
+                <span className="font-medium">{AUDIT_LABELS[entry.action] ?? entry.action}</span>
                 <span className="text-xs text-muted-foreground">
                   {new Date(entry.created_at).toLocaleString('en-IN')}
                 </span>

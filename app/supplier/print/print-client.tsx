@@ -26,7 +26,8 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
   const [loading, setLoading] = useState(false);
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rollMode, setRollMode] = useState(false);
+  // Roll mode is the daily default — labels go to the Argox CP-2140.
+  const [rollMode, setRollMode] = useState(true);
 
   const layoutConfig = layout ?? DEFAULT_LABEL_LAYOUT;
 

@@ -26,18 +26,24 @@ import { Logo } from '@/components/brand/logo';
 
 const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/bills', label: 'Bills', icon: Receipt },
+  { href: '/admin/bills', label: 'Bills', icon: Receipt, showUnprinted: true },
   { href: '/admin/suppliers', label: 'Suppliers', icon: Users },
   { href: '/admin/items', label: 'Items', icon: Package },
   { href: '/admin/imports', label: 'Imports', icon: FileInput },
   { href: '/admin/pricing', label: 'Pricing', icon: IndianRupee },
   { href: '/admin/layouts', label: 'Layouts', icon: LayoutGrid },
-  { href: '/admin/print', label: 'Print', icon: Printer },
+  { href: '/admin/print', label: 'Print', icon: Printer, showUnprinted: true },
   { href: '/admin/verify', label: 'Verify', icon: ShieldCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AdminLayout({ children }: { children: React.ReactNode }) {
+export function AdminLayout({
+  children,
+  unprintedCount = 0,
+}: {
+  children: React.ReactNode;
+  unprintedCount?: number;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
@@ -65,7 +71,12 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.showUnprinted && unprintedCount > 0 && (
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold tabular-nums text-white">
+                  {unprintedCount}
+                </span>
+              )}
             </Link>
           );
         })}
