@@ -69,12 +69,18 @@ export function PdfPrintTools({
     setError(null);
     try {
       await printPdfDocument(doc);
+      // Printing succeeded — mark the bill(s) printed automatically so the
+      // user doesn't need a separate click. The button stays visible as a
+      // manual fallback (e.g. when printing from a downloaded PDF).
+      if (onMarkPrinted && !marked) {
+        await onMarkPrinted();
+      }
     } catch {
       setError('Direct print failed. Use Download PDF and print from your PDF viewer.');
     } finally {
       setBusy(false);
     }
-  }, [doc]);
+  }, [doc, onMarkPrinted, marked]);
 
   if (!doc) return null;
 
