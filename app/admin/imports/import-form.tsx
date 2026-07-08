@@ -11,7 +11,6 @@ import { formatINR } from '@/lib/pricing';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 import {
   prepareImportFile,
-  matchSupplierByParty,
   isSpreadsheet,
   detectImportFileType,
   type PreparedImportFile,
@@ -54,7 +53,9 @@ export function ImportForm({ suppliers, mappings }: Props) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Single-file preview flow.
-  const [preview, setPreview] = useState<{ sku: string; name: string; qty: number; rate: number }[] | null>(null);
+  const [preview, setPreview] = useState<
+    { sku: string; name: string; hsn: string | null; qty: number; rate: number; ma: number | null; dna: number | null }[] | null
+  >(null);
   const [billMeta, setBillMeta] = useState<{ number: string; date: string; party: string; total: number } | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [fileData, setFileData] = useState<PreparedImportFile | null>(null);
@@ -105,20 +106,6 @@ export function ImportForm({ suppliers, mappings }: Props) {
     setQueue((q) => q.map((item) => (item.key === key ? { ...item, ...patch } : item)));
   }
 
-  /** Resolve which supplier a parsed bill belongs to. */
-  function resolveSupplier(party: string): { id: string; name: string } | null {
-    if (supplierId) {
-      const chosen = suppliers.find((s) => s.id === supplierId);
-      if (chosen) return chosen;
-    }
-    const matched = matchSupplierByParty(party, suppliers);
-    if (matched) {
-      const s = suppliers.find((x) => x.id === matched);
-      if (s) return s;
-    }
-    return null;
-  }
-
   async function handleFiles(files: File[]) {
     resetMessages();
     if (files.length === 1) {
@@ -140,7 +127,7 @@ export function ImportForm({ suppliers, mappings }: Props) {
       if (fileData?.storagePath) void deleteTallyUploadFromClient(fileData.storagePath);
 
       const prepared = await prepareImportFile(file, mappingId, setUploadProgress);
-      const result = await previewTallyBill(prepared);
+      const result = await previewTallyBill({ ...prepared, supplierId: supplierId || undefined });
 
       if (!result.ok) {
         setError(result.error);
@@ -156,13 +143,11 @@ export function ImportForm({ suppliers, mappings }: Props) {
         return;
       }
 
-      // Auto-detect the supplier from the parsed party name.
-      if (!supplierId) {
-        const matched = matchSupplierByParty(result.data.bill.party, suppliers);
-        if (matched) {
-          setSupplierId(matched);
-          setSupplierAutoDetected(true);
-        }
+      // The server detects the supplier from the party name and computes
+      // preview MA/DNA with that supplier's rule.
+      if (!supplierId && result.data.supplier) {
+        setSupplierId(result.data.supplier.id);
+        setSupplierAutoDetected(true);
       }
 
       setPreview(result.data.items);
@@ -265,16 +250,17 @@ export function ImportForm({ suppliers, mappings }: Props) {
       );
 
       updateQueueItem(item.key, { detail: 'Parsing…' });
-      const previewResult = await previewTallyBill(prepared);
+      const previewResult = await previewTallyBill({
+        ...prepared,
+        supplierId: (replaceExisting && item.supplierId) || supplierId || undefined,
+      });
       if (!previewResult.ok) {
         if (prepared.storagePath) void deleteTallyUploadFromClient(prepared.storagePath);
         updateQueueItem(item.key, { status: 'error', detail: previewResult.error });
         return;
       }
 
-      const supplier = replaceExisting && item.supplierId
-        ? suppliers.find((s) => s.id === item.supplierId) ?? null
-        : resolveSupplier(previewResult.data.bill.party);
+      const supplier = previewResult.data.supplier;
       if (!supplier) {
         if (prepared.storagePath) void deleteTallyUploadFromClient(prepared.storagePath);
         updateQueueItem(item.key, {
@@ -520,14 +506,22 @@ export function ImportForm({ suppliers, mappings }: Props) {
             <div>Total: {formatINR(billMeta.total)}</div>
           </div>
           <h3 className="mb-2 font-medium">Preview ({preview.length} items)</h3>
+          {preview.some((i) => i.ma == null) && (
+            <p className="mb-2 text-xs text-amber-700">
+              MA/DNA can&apos;t be computed yet — select the supplier above so their pricing formula is applied, then re-select the file.
+            </p>
+          )}
           <div className="max-h-64 overflow-auto rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-3 py-2 text-left">SKU</th>
                   <th className="px-3 py-2 text-left">Name</th>
+                  <th className="px-3 py-2 text-left">HSN</th>
                   <th className="px-3 py-2 text-right">Qty</th>
                   <th className="px-3 py-2 text-right">Rate</th>
+                  <th className="px-3 py-2 text-right">MA</th>
+                  <th className="px-3 py-2 text-right">DNA</th>
                 </tr>
               </thead>
               <tbody>
@@ -535,8 +529,11 @@ export function ImportForm({ suppliers, mappings }: Props) {
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{item.sku}</td>
                     <td className="px-3 py-2">{item.name}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{item.hsn ?? '—'}</td>
                     <td className="px-3 py-2 text-right">{item.qty}</td>
                     <td className="px-3 py-2 text-right">{formatINR(item.rate)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{item.ma != null ? formatINR(item.ma) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-medium">{item.dna != null ? formatINR(item.dna) : '—'}</td>
                   </tr>
                 ))}
               </tbody>

@@ -13,8 +13,10 @@ import { parseTallyPdf } from '@/lib/tally/pdf-parser';
 import { DEFAULT_TALLY_MAPPING_ID } from '@/lib/tally/constants';
 import { fetchTallyUpload, deleteTallyUpload } from '@/lib/tally/storage';
 import { APP_NAME } from '@/lib/brand';
-import { calcMA, calcDNA } from '@/lib/pricing';
+import { calcMA, calcDNA, type PricingRule as PricingRuleShape } from '@/lib/pricing';
 import { extractHsnFromDescription } from '@/lib/tally/hsn';
+import { matchSupplierByParty } from '@/lib/tally/match-supplier';
+import { createServiceClient } from '@/lib/supabase/service';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -417,15 +419,27 @@ export async function previewTallyBill(input: {
   fileContent?: string;
   storagePath?: string;
   mappingId?: string;
+  /** Admin only: compute MA/DNA with this supplier's rule instead of auto-detecting. */
+  supplierId?: string;
 }): Promise<
   ActionResult<{
     bill: { number: string; date: string; party: string; total: number };
-    items: { sku: string; name: string; qty: number; rate: number }[];
+    items: {
+      sku: string;
+      name: string;
+      hsn: string | null;
+      qty: number;
+      rate: number;
+      ma: number | null;
+      dna: number | null;
+    }[];
+    /** Supplier the preview pricing was computed for (auto-detected from the party name when not passed in). */
+    supplier: { id: string; name: string } | null;
   }>
 > {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    const user = await requireUser();
     const parsed = TallyImportInputSchema.safeParse(input);
     if (!parsed.success) return fromZod(parsed.error);
 
@@ -435,6 +449,55 @@ export async function previewTallyBill(input: {
     // by the form (on cancel/replace), and the daily pg_cron job sweeps any
     // orphans.
     const result = await parseTallyImport(parsed.data);
+
+    // Resolve which supplier this bill belongs to so the preview can show the
+    // same MA/DNA the import will store. Suppliers are always themselves;
+    // admins either pass an explicit supplierId or we match the party name.
+    let supplier: { id: string; name: string } | null = null;
+    const supabase = await createClient();
+    if (user.role === 'supplier' && user.supplier_id) {
+      const { data } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .eq('id', user.supplier_id)
+        .maybeSingle();
+      supplier = data ?? null;
+    } else if (user.role === 'admin') {
+      const { data: allSuppliers } = await supabase
+        .from('suppliers')
+        .select('id, name')
+        .eq('active', true);
+      if (input.supplierId) {
+        supplier = (allSuppliers ?? []).find((s) => s.id === input.supplierId) ?? null;
+      }
+      if (!supplier) {
+        const matched = matchSupplierByParty(result.bill.party, allSuppliers ?? []);
+        if (matched) supplier = (allSuppliers ?? []).find((s) => s.id === matched) ?? null;
+      }
+    }
+
+    // Pricing rules are admin-only under RLS, so use the service client —
+    // safe here because the supplier id is server-resolved, never trusted
+    // from the client for supplier-role users.
+    let rule: PricingRuleShape | null = null;
+    if (supplier) {
+      const service = createServiceClient();
+      const { data } = await service
+        .from('pricing_rules')
+        .select('ma_markup1_pct, ma_markup2_pct, dna_markup1_pct, dna_markup2_pct, gst_pct')
+        .eq('supplier_id', supplier.id)
+        .maybeSingle();
+      if (data) {
+        rule = {
+          ma_markup1_pct: Number(data.ma_markup1_pct) || 0,
+          ma_markup2_pct: Number(data.ma_markup2_pct) || 0,
+          dna_markup1_pct: Number(data.dna_markup1_pct) || 0,
+          dna_markup2_pct: Number(data.dna_markup2_pct) || 0,
+          gst_pct: Number(data.gst_pct) || 5,
+        };
+      }
+    }
+
     return ok({
       bill: {
         number: result.bill.number,
@@ -445,9 +508,13 @@ export async function previewTallyBill(input: {
       items: result.items.map((i) => ({
         sku: i.sku,
         name: i.name,
+        hsn: i.hsn ?? null,
         qty: i.qty,
         rate: i.rate,
+        ma: rule ? calcMA(i.rate, rule) : null,
+        dna: rule ? calcDNA(i.rate, rule) : null,
       })),
+      supplier,
     });
   } catch (err) {
     logger.error('previewTallyBill error', { reqId, err });
