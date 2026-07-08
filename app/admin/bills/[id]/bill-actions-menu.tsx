@@ -31,13 +31,13 @@ export function BillActionsMenu({ billId, billNumber, status }: Props) {
     if (result.ok) {
       const hsnNote = result.data.hsnUpdated > 0 ? ` and filled ${result.data.hsnUpdated} HSN` : '';
       toast({
-        title: 'Pricing refreshed',
+        title: 'Pricing recomputed',
         description: `Updated ${result.data.updated} line items${hsnNote}.`,
         variant: 'success',
       });
       router.refresh();
     } else {
-      toast({ title: 'Refresh failed', description: result.error, variant: 'destructive' });
+      toast({ title: 'Recompute failed', description: result.error, variant: 'destructive' });
     }
   }
 
@@ -67,12 +67,6 @@ export function BillActionsMenu({ billId, billNumber, status }: Props) {
   }
 
   const items = [
-    {
-      label: busy ? 'Refreshing…' : 'Refresh pricing',
-      icon: <RefreshCw className="h-4 w-4" />,
-      onSelect: () => void handleRefreshPricing(),
-      disabled: busy,
-    },
     ...(status !== 'cancelled'
       ? [
           {
@@ -93,6 +87,15 @@ export function BillActionsMenu({ billId, billNumber, status }: Props) {
 
   return (
     <>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={busy}
+        onClick={() => void handleRefreshPricing()}
+      >
+        <RefreshCw className={`mr-1.5 h-4 w-4 ${busy ? 'animate-spin' : ''}`} />
+        {busy ? 'Recomputing…' : 'Recompute Pricing'}
+      </Button>
       <ActionMenu items={items} size="default" label="More bill actions" />
 
       {confirm && (

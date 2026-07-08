@@ -16,7 +16,7 @@ const AUDIT_LABELS: Record<string, string> = {
   import: 'Imported',
   manual_edit: 'Edited manually',
   manual_create: 'Created manually',
-  recompute_pricing: 'Pricing refreshed',
+  recompute_pricing: 'Pricing recomputed',
   print: 'Printed',
   cancel: 'Cancelled',
   delete: 'Deleted',
