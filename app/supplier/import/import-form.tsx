@@ -31,7 +31,15 @@ type Props = {
   supplierId: string;
 };
 
-type PreviewItem = { sku: string; name: string; qty: number; rate: number };
+type PreviewItem = {
+  sku: string;
+  name: string;
+  hsn: string | null;
+  qty: number;
+  rate: number;
+  ma: number | null;
+  dna: number | null;
+};
 
 type QueueStatus = 'pending' | 'processing' | 'imported' | 'replaced' | 'duplicate' | 'error' | 'skipped';
 
@@ -464,8 +472,11 @@ export function ImportForm({ mappings, supplierId }: Props) {
                   <TR>
                     <TH>SKU</TH>
                     <TH>Name</TH>
+                    <TH>HSN</TH>
                     <TH align="right">Qty</TH>
                     <TH align="right">Rate</TH>
+                    <TH align="right">MA</TH>
+                    <TH align="right">DNA</TH>
                   </TR>
                 </THead>
                 <TBody>
@@ -473,8 +484,11 @@ export function ImportForm({ mappings, supplierId }: Props) {
                     <TR key={i}>
                       <TD className="font-mono text-xs">{item.sku}</TD>
                       <TD>{item.name}</TD>
+                      <TD className="font-mono text-xs text-muted-foreground">{item.hsn ?? '—'}</TD>
                       <TD align="right">{item.qty}</TD>
                       <TD align="right">{formatINR(item.rate)}</TD>
+                      <TD align="right" className="font-medium">{item.ma != null ? formatINR(item.ma) : '—'}</TD>
+                      <TD align="right" className="font-medium">{item.dna != null ? formatINR(item.dna) : '—'}</TD>
                     </TR>
                   ))}
                 </TBody>
