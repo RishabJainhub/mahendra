@@ -10,21 +10,23 @@ import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { EmptyState } from '@/components/layout/empty-state';
 import { BillStatusBadge } from '@/components/bills/bill-status-badge';
 import { DeleteBillButton } from './[id]/delete-button';
+import { RowPrintButton } from './row-print-button';
 import { FileText, Filter, X, Receipt } from 'lucide-react';
 import Link from 'next/link';
 
 const PAGE_SIZE = 25;
 
 type Props = {
-  searchParams: Promise<{ status?: string; supplier?: string; from?: string; to?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; supplier?: string; from?: string; to?: string; q?: string; page?: string }>;
 };
 
-function buildPageUrl(page: number, params: { status?: string; supplier?: string; from?: string; to?: string }) {
+function buildPageUrl(page: number, params: { status?: string; supplier?: string; from?: string; to?: string; q?: string }) {
   const q = new URLSearchParams();
   if (params.status) q.set('status', params.status);
   if (params.supplier) q.set('supplier', params.supplier);
   if (params.from) q.set('from', params.from);
   if (params.to) q.set('to', params.to);
+  if (params.q) q.set('q', params.q);
   if (page > 1) q.set('page', String(page));
   const qs = q.toString();
   return `/admin/bills${qs ? `?${qs}` : ''}`;
@@ -38,12 +40,13 @@ export default async function AdminBillsPage({ searchParams }: Props) {
     supplierId: params.supplier,
     from: params.from,
     to: params.to,
+    search: params.q,
     page,
     pageSize: PAGE_SIZE,
   });
   const suppliers = await getSuppliers();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasFilters = Boolean(params.status || params.supplier || params.from || params.to);
+  const hasFilters = Boolean(params.status || params.supplier || params.from || params.to || params.q);
 
   return (
     <PageShell>
@@ -55,6 +58,10 @@ export default async function AdminBillsPage({ searchParams }: Props) {
       </PageHeader>
 
       <form className="mb-6 flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <label htmlFor="q" className="text-xs font-medium text-muted-foreground">Bill #</label>
+          <Input name="q" defaultValue={params.q ?? ''} placeholder="Search bill number" className="w-44" />
+        </div>
         <div className="space-y-1.5">
           <label htmlFor="status" className="text-xs font-medium text-muted-foreground">Status</label>
           <Select name="status" defaultValue={params.status ?? ''} className="w-44">
@@ -126,13 +133,16 @@ export default async function AdminBillsPage({ searchParams }: Props) {
                   <TD align="right" className="tabular-nums">{formatINR(Number(bill.total_amount))}</TD>
                   <TD><BillStatusBadge status={bill.status} /></TD>
                   <TD align="right">
-                    <DeleteBillButton
-                      billId={bill.id}
-                      billNumber={bill.bill_number}
-                      variant="ghost"
-                      label="Delete"
-                      className="h-8 px-2 text-destructive"
-                    />
+                    <div className="flex items-center justify-end gap-1">
+                      {bill.status !== 'cancelled' && <RowPrintButton billId={bill.id} />}
+                      <DeleteBillButton
+                        billId={bill.id}
+                        billNumber={bill.bill_number}
+                        variant="ghost"
+                        label="Delete"
+                        className="h-8 px-2 text-destructive"
+                      />
+                    </div>
                   </TD>
                 </TR>
               ))}

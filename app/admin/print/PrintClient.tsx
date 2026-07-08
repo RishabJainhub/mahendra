@@ -50,7 +50,8 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
-  const [rollMode, setRollMode] = useState(false);
+  // Roll mode is the daily default — the shop prints on the Argox CP-2140.
+  const [rollMode, setRollMode] = useState(true);
 
   const layout = useMemo(
     () => layouts.find((l) => l.id === layoutId) ?? layouts[0] ?? null,

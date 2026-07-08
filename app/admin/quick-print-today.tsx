@@ -8,9 +8,11 @@ import {
   getPrintableBills,
   markBillPrinted,
   markBillsPrinted,
+  unmarkBillsPrinted,
 } from '@/app/actions/bills';
 import { renderBulkBillPDF, renderLabelRollPDF, DEFAULT_LABEL_LAYOUT } from '@/lib/pdf';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { PdfPrintTools } from '@/components/pdf/pdf-print-tools';
 import { Printer } from 'lucide-react';
 
@@ -30,6 +32,7 @@ function todayISO(): string {
  */
 export function QuickPrintToday() {
   const router = useRouter();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bundles, setBundles] = useState<Bundles>([]);
@@ -66,6 +69,20 @@ export function QuickPrintToday() {
     if (result.ok) {
       setMarked(true);
       router.refresh();
+      toast({
+        title: `Marked ${ids.length} bill${ids.length !== 1 ? 's' : ''} as printed`,
+        variant: 'success',
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            const undo = await unmarkBillsPrinted(ids);
+            if (undo.ok) {
+              setMarked(false);
+              router.refresh();
+            }
+          },
+        },
+      });
     }
   }
 

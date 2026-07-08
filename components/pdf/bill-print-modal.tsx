@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
-import { getBillStickers, markBillPrinted } from '@/app/actions/bills';
+import { getBillStickers, markBillPrinted, unmarkBillsPrinted } from '@/app/actions/bills';
 import { renderBillPDF, renderLabelRollPDF, DEFAULT_LABEL_LAYOUT } from '@/lib/pdf';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { PdfPrintTools } from '@/components/pdf/pdf-print-tools';
 
 type Sticker = Awaited<ReturnType<typeof getBillStickers>>;
@@ -22,6 +23,7 @@ type Props = {
  * detail page and right after an import succeeds.
  */
 export function BillPrintModal({ billId, onClose, onMarked }: Props) {
+  const { toast } = useToast();
   const [sticker, setSticker] = useState<Sticker>(null);
   const [rollMode, setRollMode] = useState(true);
   const [marked, setMarked] = useState(false);
@@ -44,6 +46,21 @@ export function BillPrintModal({ billId, onClose, onMarked }: Props) {
     if (result.ok) {
       setMarked(true);
       onMarked?.();
+      toast({
+        title: 'Marked as printed',
+        description: sticker ? `Bill ${sticker.bill.bill_number}` : undefined,
+        variant: 'success',
+        action: {
+          label: 'Undo',
+          onClick: async () => {
+            const undo = await unmarkBillsPrinted([billId]);
+            if (undo.ok) {
+              setMarked(false);
+              onMarked?.();
+            }
+          },
+        },
+      });
     }
   }
 

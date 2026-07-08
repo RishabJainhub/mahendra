@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Pencil, UserX, UserCheck, Trash2, Send, KeyRound } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Users, Pencil, UserX, UserCheck, Trash2, Send, KeyRound, Receipt, Calculator } from 'lucide-react';
 import {
   createSupplier,
   sendSupplierInvite,
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ButtonLink } from '@/components/ui/button-link';
+import { ActionMenu } from '@/components/ui/action-menu';
 import { Table, THead, TBody, TR, TH, TD } from '@/components/ui/table';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/layout/empty-state';
@@ -50,6 +52,7 @@ type InviteSuccess = {
 };
 
 export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
+  const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
   const [formulaTarget, setFormulaTarget] = useState<Supplier | null>(null);
@@ -302,8 +305,8 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                     </Badge>
                   </TD>
                   <TD>
-                    <div className="flex justify-end gap-1">
-                      {!s.has_login && (
+                    <div className="flex items-center justify-end gap-1.5">
+                      {!s.has_login ? (
                         <Button
                           size="sm"
                           variant="default"
@@ -314,8 +317,7 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                           <Send className="mr-1 h-3.5 w-3.5" />
                           {invitingId === s.id ? 'Inviting…' : 'Invite'}
                         </Button>
-                      )}
-                      {s.has_login && (
+                      ) : (
                         <Button
                           size="sm"
                           variant="outline"
@@ -327,35 +329,40 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                           {resettingId === s.id ? 'Resetting…' : 'New password'}
                         </Button>
                       )}
-                      <Button size="sm" variant="outline" onClick={() => { setFormulaTarget(s); setError(null); }}>
-                        Formula
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => { setEditing(s); setError(null); }}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <ButtonLink href={`/admin/suppliers/${s.id}`} variant="default" size="sm">
+                      <ButtonLink href={`/admin/suppliers/${s.id}`} variant="outline" size="sm">
                         Dashboard
                       </ButtonLink>
-                      <ButtonLink href={`/admin/bills?supplier=${s.id}`} variant="outline" size="sm">
-                        Bills
-                      </ButtonLink>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleActive(s)}
-                        title={s.active ? 'Deactivate' : 'Activate'}
-                      >
-                        {s.active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:bg-destructive/10"
-                        onClick={() => { setPendingDelete(s); setError(null); }}
-                        title="Delete supplier"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <ActionMenu
+                        label={`More actions for ${s.name}`}
+                        items={[
+                          {
+                            label: 'Pricing formula',
+                            icon: <Calculator className="h-4 w-4" />,
+                            onSelect: () => { setFormulaTarget(s); setError(null); },
+                          },
+                          {
+                            label: 'Edit details',
+                            icon: <Pencil className="h-4 w-4" />,
+                            onSelect: () => { setEditing(s); setError(null); },
+                          },
+                          {
+                            label: 'View bills',
+                            icon: <Receipt className="h-4 w-4" />,
+                            onSelect: () => router.push(`/admin/bills?supplier=${s.id}`),
+                          },
+                          {
+                            label: s.active ? 'Deactivate' : 'Activate',
+                            icon: s.active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />,
+                            onSelect: () => void toggleActive(s),
+                          },
+                          {
+                            label: 'Delete supplier',
+                            icon: <Trash2 className="h-4 w-4" />,
+                            onSelect: () => { setPendingDelete(s); setError(null); },
+                            destructive: true,
+                          },
+                        ]}
+                      />
                     </div>
                   </TD>
                 </TR>
