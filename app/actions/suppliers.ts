@@ -64,7 +64,7 @@ export async function getSupplierAdminDashboard(id: string) {
 
     const { data: supplier, error: supplierError } = await supabase
       .from('suppliers')
-      .select('*, pricing_rule:pricing_rules(*)')
+      .select('*, pricing_rule:pricing_rules!pricing_rules_supplier_id_fkey(*)')
       .eq('id', id)
       .single();
 
@@ -331,7 +331,7 @@ export async function sendSupplierInvite(
 
     const { data: supplier, error: supplierErr } = await service
       .from('suppliers')
-      .select('id, name, email, tenant_id, pricing_rule:pricing_rules(*)')
+      .select('id, name, email, tenant_id, pricing_rule:pricing_rules!pricing_rules_supplier_id_fkey(*)')
       .eq('id', supplierId)
       .single();
 
@@ -680,10 +680,17 @@ export async function getPricingRules() {
   try {
     await requireAdmin();
     const supabase = await createClient();
-    const { data } = await supabase
+    // Two FKs relate pricing_rules and suppliers (supplier_id and the
+    // suppliers.pricing_rule_id backref) — name the FK or PostgREST returns
+    // 300 Multiple Choices and the page sees no rules at all.
+    const { data, error } = await supabase
       .from('pricing_rules')
-      .select('*, supplier:suppliers(id, name)')
+      .select('*, supplier:suppliers!pricing_rules_supplier_id_fkey(id, name)')
       .order('supplier_id');
+    if (error) {
+      logger.error('getPricingRules query failed', { reqId, error: error.message });
+      return [];
+    }
     return data ?? [];
   } catch (err) {
     logger.error('getPricingRules error', { reqId, err });
