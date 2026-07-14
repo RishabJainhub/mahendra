@@ -103,7 +103,7 @@ export const PricingRuleInputSchema = z.object({
 
 export const SupplierUpdateInputSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(),
   code_prefix: optionalShortString,
   code_number: optionalShortString,

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Pencil, UserX, UserCheck, Trash2, Send, KeyRound, Receipt, Calculator } from 'lucide-react';
+import { Users, Pencil, UserX, UserCheck, Trash2, Send, KeyRound, Receipt, Calculator, FileInput } from 'lucide-react';
 import {
   createSupplier,
   sendSupplierInvite,
@@ -161,8 +161,12 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
     if (result.ok) {
       setEditing(null);
       setMessage('Supplier updated.');
+      router.refresh();
     } else {
-      setError(result.error);
+      const msg = result.error.toLowerCase().includes('email')
+        ? 'Email is invalid. Use a full address (e.g. name@company.com) or clear the field to save other changes.'
+        : result.error;
+      setError(msg);
     }
   }
 
@@ -336,6 +340,11 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
                         label={`More actions for ${s.name}`}
                         items={[
                           {
+                            label: 'Import bill',
+                            icon: <FileInput className="h-4 w-4" />,
+                            onSelect: () => router.push(`/admin/imports?supplier=${s.id}`),
+                          },
+                          {
                             label: 'Pricing formula',
                             icon: <Calculator className="h-4 w-4" />,
                             onSelect: () => { setFormulaTarget(s); setError(null); },
@@ -468,6 +477,9 @@ export function SuppliersClient({ suppliers }: { suppliers: Supplier[] }) {
             <div>
               <Label htmlFor="edit-email">Email</Label>
               <Input id="edit-email" name="email" type="email" defaultValue={editing.email ?? ''} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Optional. Leave blank if this supplier has no email yet.
+              </p>
             </div>
             <div>
               <Label htmlFor="edit-phone">Phone</Label>
