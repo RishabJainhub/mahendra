@@ -63,7 +63,7 @@ export function QuickPrintToday() {
     }
   }
 
-  async function handleMarkPrinted() {
+  async function handleMarkPrinted(): Promise<boolean> {
     const ids = bundles.map((b) => b.id);
     const result = ids.length === 1 ? await markBillPrinted(ids[0]) : await markBillsPrinted(ids);
     if (result.ok) {
@@ -83,7 +83,14 @@ export function QuickPrintToday() {
           },
         },
       });
+      return true;
     }
+    toast({
+      title: 'Could not mark as printed',
+      description: result.error,
+      variant: 'destructive',
+    });
+    return false;
   }
 
   const doc = useMemo<ReactElement | null>(() => {

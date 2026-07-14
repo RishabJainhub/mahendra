@@ -41,7 +41,7 @@ export function BillPrintModal({ billId, onClose, onMarked }: Props) {
     };
   }, [billId]);
 
-  async function handleMarkPrinted() {
+  async function handleMarkPrinted(): Promise<boolean> {
     const result = await markBillPrinted(billId);
     if (result.ok) {
       setMarked(true);
@@ -61,7 +61,14 @@ export function BillPrintModal({ billId, onClose, onMarked }: Props) {
           },
         },
       });
+      return true;
     }
+    toast({
+      title: 'Could not mark as printed',
+      description: result.error,
+      variant: 'destructive',
+    });
+    return false;
   }
 
   // Stable doc reference so the preview iframe doesn't regenerate every render.

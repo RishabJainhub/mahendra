@@ -22,6 +22,18 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+async function hideBillFromPortal(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  billId: string,
+  role: 'admin' | 'supplier'
+) {
+  const patch =
+    role === 'admin'
+      ? { admin_hidden_at: new Date().toISOString() }
+      : { supplier_hidden_at: new Date().toISOString() };
+  return supabase.from('bills').update(patch).eq('id', billId);
+}
+
 export type BillFilters = {
   status?: string;
   supplierId?: string;
@@ -340,18 +352,24 @@ export async function markBillsPrinted(billIds: string[]): Promise<ActionResult<
 
     for (let i = 0; i < billIds.length; i += chunkSize) {
       const chunk = billIds.slice(i, i + chunkSize);
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('bills')
         .update({ status: 'printed' })
-        .in('id', chunk);
+        .in('id', chunk)
+        .select('id');
 
       if (error) {
         logger.error('markBillsPrinted failed', { reqId, error: error.message });
         return fail(error.message);
       }
-      count += chunk.length;
+      count += data?.length ?? 0;
     }
 
+    if (count === 0) {
+      return fail('No bills were updated. Refresh the page and try again.');
+    }
+
+    revalidatePath('/admin');
     revalidatePath('/admin/bills');
     revalidatePath('/admin/print');
     revalidatePath('/supplier');
@@ -698,14 +716,18 @@ export async function importTallyBill(
         );
       }
 
-      const { error: deleteError } = await supabase.from('bills').delete().eq('id', existing.id);
-      if (deleteError) {
-        logger.error('importTallyBill replace delete failed', {
+      const hideResult = await hideBillFromPortal(
+        supabase,
+        existing.id,
+        user.role === 'admin' ? 'admin' : 'supplier'
+      );
+      if (hideResult.error) {
+        logger.error('importTallyBill replace hide failed', {
           reqId,
           existingBillId: existing.id,
-          error: deleteError.message,
+          error: hideResult.error.message,
         });
-        return fail(`Could not replace existing bill: ${deleteError.message}`);
+        return fail(`Could not replace existing bill: ${hideResult.error.message}`);
       }
 
       await writeAudit('replace', 'bill', existing.id, {
@@ -1053,18 +1075,37 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
       return fail('Not authorized to delete this bill');
     }
 
-    const { error } = await supabase.from('bills').delete().eq('id', id);
-    if (error) {
-      logger.error('deleteBill failed', { reqId, error: error.message });
-      return fail(error.message);
+    if (user.role === 'admin') {
+      const { error } = await hideBillFromPortal(supabase, id, 'admin');
+
+      if (error) {
+        logger.error('deleteBill admin hide failed', { reqId, error: error.message });
+        return fail(error.message);
+      }
+
+      await writeAudit('hide', 'bill', id, {
+        billNumber: bill.bill_number,
+        supplierId: bill.supplier_id,
+        hiddenFrom: 'admin',
+      });
+
+      logger.info('deleteBill admin hide success', { reqId, id });
+    } else {
+      const { error } = await hideBillFromPortal(supabase, id, 'supplier');
+      if (error) {
+        logger.error('deleteBill supplier hide failed', { reqId, error: error.message });
+        return fail(error.message);
+      }
+
+      await writeAudit('hide', 'bill', id, {
+        billNumber: bill.bill_number,
+        supplierId: bill.supplier_id,
+        hiddenFrom: 'supplier',
+      });
+
+      logger.info('deleteBill supplier hide success', { reqId, id });
     }
 
-    await writeAudit('delete', 'bill', id, {
-      billNumber: bill.bill_number,
-      supplierId: bill.supplier_id,
-    });
-
-    logger.info('deleteBill success', { reqId, id });
     revalidatePath('/admin/bills');
     revalidatePath('/admin/print');
     revalidatePath('/supplier');
@@ -1088,19 +1129,27 @@ export async function markBillPrinted(id: string): Promise<ActionResult<{ id: st
     await requireUser();
     const supabase = await createClient();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bills')
       .update({ status: 'printed' })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       logger.error('markBillPrinted failed', { reqId, error: error.message });
       return fail(error.message);
     }
+    if (!data) {
+      logger.error('markBillPrinted no rows', { reqId, id });
+      return fail('Could not update bill status. Refresh the page and try again.');
+    }
 
     await writeAudit('print', 'bill', id, {});
     logger.info('markBillPrinted success', { reqId, id });
+    revalidatePath('/admin');
     revalidatePath('/admin/bills');
+    revalidatePath('/admin/print');
     revalidatePath('/supplier');
     revalidatePath('/supplier/bills');
 
