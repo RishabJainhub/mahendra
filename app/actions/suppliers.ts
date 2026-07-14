@@ -483,9 +483,13 @@ export async function updateSupplier(
     if (!parsed.success) return fromZod(parsed.error);
 
     const supabase = await createClient();
+    const email =
+      parsed.data.email && parsed.data.email.trim()
+        ? parsed.data.email.toLowerCase().trim()
+        : null;
     const update: Record<string, string | null | undefined> = {
       name: parsed.data.name,
-      email: parsed.data.email,
+      email,
       phone: parsed.data.phone,
       code_prefix: parsed.data.code_prefix || null,
       code_number: parsed.data.code_number || null,
