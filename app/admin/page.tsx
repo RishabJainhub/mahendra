@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server';
 import { getDashboardData } from '@/app/actions/dashboard';
 import { DashboardActions } from '@/components/admin/dashboard-actions';
 import { DashboardKpis } from '@/components/admin/dashboard-kpis';
-import { MonthEndBanner } from './month-end-banner';
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 
 export default async function AdminDashboardPage() {
@@ -29,7 +28,6 @@ export default async function AdminDashboardPage() {
         description={user.tenant?.name ?? 'What do you need to do today?'}
       />
       <DashboardKpis kpis={data.kpis} />
-      <MonthEndBanner alert={data.monthEndAlert} />
       <DashboardActions unprintedCount={unprintedCount} />
     </PageShell>
   );
