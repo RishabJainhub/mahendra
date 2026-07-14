@@ -10,11 +10,8 @@ import {
   Printer,
   Receipt,
   Users,
-  Package,
   IndianRupee,
-  LayoutGrid,
   Settings,
-  ShieldCheck,
   Menu,
   X,
   LogOut,
@@ -25,15 +22,12 @@ import { BrandLockup } from '@/components/brand/brand-lockup';
 import { Logo } from '@/components/brand/logo';
 
 const NAV = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/admin', label: 'Home', icon: LayoutDashboard },
   { href: '/admin/bills', label: 'Bills', icon: Receipt, showUnprinted: true },
   { href: '/admin/suppliers', label: 'Suppliers', icon: Users },
-  { href: '/admin/items', label: 'Items', icon: Package },
   { href: '/admin/imports', label: 'Imports', icon: FileInput },
   { href: '/admin/pricing', label: 'Pricing', icon: IndianRupee },
-  { href: '/admin/layouts', label: 'Layouts', icon: LayoutGrid },
   { href: '/admin/print', label: 'Print', icon: Printer, showUnprinted: true },
-  { href: '/admin/verify', label: 'Verify', icon: ShieldCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 

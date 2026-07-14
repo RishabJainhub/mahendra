@@ -30,7 +30,7 @@ function todayISO(): string {
  * One-click dashboard action: gather every unprinted bill dated today and
  * open the print modal with the bulk roll PDF ready.
  */
-export function QuickPrintToday() {
+export function QuickPrintToday({ variant = 'inline' }: { variant?: 'inline' | 'card' }) {
   const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -103,11 +103,21 @@ export function QuickPrintToday() {
 
   return (
     <>
-      <Button variant="outline" onClick={() => void handleOpen()} disabled={loading}>
+      <Button
+        variant={variant === 'card' ? 'default' : 'outline'}
+        className={variant === 'card' ? 'w-full' : undefined}
+        onClick={() => void handleOpen()}
+        disabled={loading}
+      >
         <Printer className="mr-1.5 h-4 w-4" />
-        {loading ? 'Loading…' : "Print today's labels"}
+        {loading ? 'Loading…' : variant === 'card' ? 'Open print' : "Print today's labels"}
       </Button>
-      {notice && <span className="text-sm text-muted-foreground">{notice}</span>}
+      {notice && variant === 'inline' && (
+        <span className="text-sm text-muted-foreground">{notice}</span>
+      )}
+      {notice && variant === 'card' && (
+        <p className="mt-2 text-xs text-muted-foreground">{notice}</p>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

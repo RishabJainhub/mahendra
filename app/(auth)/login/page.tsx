@@ -1,6 +1,7 @@
 import { FileInput, Printer, IndianRupee } from 'lucide-react';
 import { LoginForm } from './login-form';
 import { SetupBanner } from './setup-banner';
+import { SupplierPasswordHelp } from '@/components/auth/supplier-password-help';
 import { APP_LOGIN_SUBTITLE, APP_TAGLINE } from '@/lib/brand';
 import { BrandLockup } from '@/components/brand/brand-lockup';
 import { Logo } from '@/components/brand/logo';
@@ -53,6 +54,7 @@ export default function LoginPage() {
           </div>
           <p className="mb-6 hidden text-center text-sm text-muted-foreground lg:block">{APP_LOGIN_SUBTITLE}</p>
           <LoginForm disabled={!configured} />
+          <SupplierPasswordHelp />
         </div>
       </div>
     </div>
