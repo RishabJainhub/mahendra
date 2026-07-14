@@ -72,11 +72,11 @@ export async function middleware(request: NextRequest) {
 
     if (!hasValidSession) {
       if (pathname === '/login') {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         return response;
       }
       if (!isPublicPath(pathname)) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         const url = request.nextUrl.clone();
         url.pathname = '/login';
         return NextResponse.redirect(url);
