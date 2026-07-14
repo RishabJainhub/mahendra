@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PageHeader, PageShell } from '@/components/layout/page-header';
 import { revalidatePath } from 'next/cache';
 import { MonthEndPanel } from './month-end-panel';
-import { Building2, Save } from 'lucide-react';
+import { ButtonLink } from '@/components/ui/button-link';
+import { Building2, Save, LayoutGrid, Package, ShieldCheck, Wrench } from 'lucide-react';
 
 async function updateTenant(formData: FormData) {
   'use server';
@@ -66,6 +67,32 @@ export default async function AdminSettingsPage() {
 
         <MonthEndPanel />
       </div>
+
+      <Card className="mt-6">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            Advanced tools
+          </CardTitle>
+          <CardDescription>
+            Not needed for daily work. Use these only for printer setup, manual bills, or troubleshooting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <ButtonLink href="/admin/layouts" variant="outline">
+            <LayoutGrid className="mr-1.5 h-4 w-4" />
+            Label layouts
+          </ButtonLink>
+          <ButtonLink href="/admin/items" variant="outline">
+            <Package className="mr-1.5 h-4 w-4" />
+            Item catalogue
+          </ButtonLink>
+          <ButtonLink href="/admin/verify" variant="outline">
+            <ShieldCheck className="mr-1.5 h-4 w-4" />
+            System verify
+          </ButtonLink>
+        </CardContent>
+      </Card>
     </PageShell>
   );
 }
