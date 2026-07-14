@@ -63,15 +63,16 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
     }
   }
 
-  async function handleMarkPrinted() {
-    if (!billId) return;
+  async function handleMarkPrinted(): Promise<boolean> {
+    if (!billId) return false;
     const result = await markBillPrinted(billId);
     if (result.ok) {
       setMarked(true);
       router.refresh();
-    } else {
-      setError(result.error);
+      return true;
     }
+    setError(result.error);
+    return false;
   }
 
   return (

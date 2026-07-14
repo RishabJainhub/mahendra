@@ -9,7 +9,8 @@ import { Printer, FileDown } from 'lucide-react';
 type Props = {
   doc: ReactElement | null;
   fileName: string;
-  onMarkPrinted?: () => Promise<void>;
+  /** Return false when the status update failed so we can show an error. */
+  onMarkPrinted?: () => Promise<boolean | void>;
   marked?: boolean;
   markLabel?: string;
 };
@@ -23,9 +24,17 @@ export function PdfPrintTools({
 }: Props) {
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const [locallyMarked, setLocallyMarked] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isMarked = marked || locallyMarked;
+
+  useEffect(() => {
+    setLocallyMarked(false);
+  }, [doc, fileName]);
 
   useEffect(() => {
     if (!doc || !showPreview) {
@@ -50,18 +59,37 @@ export function PdfPrintTools({
     };
   }, [previewUrl]);
 
+  const tryAutoMark = useCallback(async () => {
+    if (!onMarkPrinted || isMarked) return;
+    setMarking(true);
+    try {
+      const success = await onMarkPrinted();
+      if (success !== false) {
+        setLocallyMarked(true);
+      } else {
+        setError('Could not mark as printed. Click "Mark as Printed" or try again.');
+      }
+    } catch {
+      setError('Could not mark as printed. Click "Mark as Printed" or try again.');
+    } finally {
+      setMarking(false);
+    }
+  }, [onMarkPrinted, isMarked]);
+
   const handleDownload = useCallback(async () => {
     if (!doc) return;
     setDownloading(true);
     setError(null);
     try {
       await downloadPdfDocument(doc, fileName);
+      // Argox / label-printer workflow usually downloads then prints externally.
+      await tryAutoMark();
     } catch {
       setError('PDF download failed. Try again or use a smaller batch.');
     } finally {
       setDownloading(false);
     }
-  }, [doc, fileName]);
+  }, [doc, fileName, tryAutoMark]);
 
   const handlePrint = useCallback(async () => {
     if (!doc) return;
@@ -69,18 +97,31 @@ export function PdfPrintTools({
     setError(null);
     try {
       await printPdfDocument(doc);
-      // Printing succeeded — mark the bill(s) printed automatically so the
-      // user doesn't need a separate click. The button stays visible as a
-      // manual fallback (e.g. when printing from a downloaded PDF).
-      if (onMarkPrinted && !marked) {
-        await onMarkPrinted();
-      }
+      await tryAutoMark();
     } catch {
       setError('Direct print failed. Use Download PDF and print from your PDF viewer.');
     } finally {
       setBusy(false);
     }
-  }, [doc, onMarkPrinted, marked]);
+  }, [doc, tryAutoMark]);
+
+  const handleManualMark = useCallback(async () => {
+    if (!onMarkPrinted || isMarked) return;
+    setMarking(true);
+    setError(null);
+    try {
+      const success = await onMarkPrinted();
+      if (success !== false) {
+        setLocallyMarked(true);
+      } else {
+        setError('Could not mark as printed. Refresh the page and try again.');
+      }
+    } catch {
+      setError('Could not mark as printed. Refresh the page and try again.');
+    } finally {
+      setMarking(false);
+    }
+  }, [onMarkPrinted, isMarked]);
 
   if (!doc) return null;
 
@@ -99,8 +140,13 @@ export function PdfPrintTools({
           {showPreview ? 'Hide Preview' : 'Show Preview'}
         </Button>
         {onMarkPrinted && (
-          <Button type="button" variant="outline" onClick={() => void onMarkPrinted()} disabled={marked}>
-            {marked ? 'Marked as Printed' : markLabel}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleManualMark()}
+            disabled={isMarked || marking}
+          >
+            {isMarked ? 'Marked as Printed' : marking ? 'Marking…' : markLabel}
           </Button>
         )}
       </div>

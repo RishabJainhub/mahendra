@@ -144,8 +144,8 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
     }
   }
 
-  async function handleMarkPrinted() {
-    if (selectedBulkIds.length === 0) return;
+  async function handleMarkPrinted(): Promise<boolean> {
+    if (selectedBulkIds.length === 0) return false;
     const result =
       selectedBulkIds.length === 1
         ? await markBillPrinted(selectedBulkIds[0])
@@ -155,9 +155,10 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
       setMarked(true);
       router.refresh();
       await loadBills();
-    } else {
-      setError(result.error);
+      return true;
     }
+    setError(result.error);
+    return false;
   }
 
   return (
