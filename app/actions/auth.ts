@@ -87,7 +87,7 @@ export async function signIn(
 
     const resolved = await resolveLoginRole(supabase, user.id, user.app_metadata ?? {});
     if (!resolved) {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       logger.warn('signIn missing profile', { reqId, userId: user.id });
       return fail(
         'No login profile found for this account. After a database reset, create an admin: node create_admin.js',
@@ -97,7 +97,7 @@ export async function signIn(
 
     const { role } = resolved;
     if (role !== 'admin' && role !== 'supplier') {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return fail('Invalid account role. Contact an administrator.', 'INVALID_ROLE');
     }
 
@@ -110,7 +110,7 @@ export async function signIn(
         .eq('id', resolved.supplierId ?? '')
         .maybeSingle();
       if (supplierRow && supplierRow.active === false) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: 'local' });
         logger.warn('signIn blocked deactivated supplier', { reqId, userId: user.id });
         return fail(
           'Your supplier account has been deactivated. Contact the administrator.',
@@ -134,7 +134,7 @@ export async function signIn(
 export async function signOut(): Promise<void> {
   const reqId = newRequestId();
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: 'local' });
   logger.info('signOut', { reqId });
   revalidatePath('/', 'layout');
   redirect('/login');
