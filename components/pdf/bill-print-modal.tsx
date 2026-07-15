@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { getBillStickers, markBillPrinted, unmarkBillsPrinted } from '@/app/actions/bills';
 import { renderBillPDF, renderLabelRollPDF, DEFAULT_LABEL_LAYOUT } from '@/lib/pdf';
@@ -28,6 +28,11 @@ export function BillPrintModal({ billId, onClose, onMarked }: Props) {
   const [rollMode, setRollMode] = useState(true);
   const [marked, setMarked] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoMarkedRef = useRef(false);
+
+  useEffect(() => {
+    autoMarkedRef.current = false;
+  }, [billId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +45,12 @@ export function BillPrintModal({ billId, onClose, onMarked }: Props) {
       cancelled = true;
     };
   }, [billId]);
+
+  useEffect(() => {
+    if (!sticker || autoMarkedRef.current) return;
+    autoMarkedRef.current = true;
+    void handleMarkPrinted();
+  }, [sticker]);
 
   async function handleMarkPrinted(): Promise<boolean> {
     const result = await markBillPrinted(billId);

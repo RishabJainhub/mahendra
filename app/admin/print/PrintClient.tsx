@@ -78,6 +78,20 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
 
   const unprintedToday = bills.filter((b) => b.status === 'imported');
 
+  async function markBillIds(ids: string[]): Promise<boolean> {
+    if (ids.length === 0) return false;
+    const result =
+      ids.length === 1 ? await markBillPrinted(ids[0]) : await markBillsPrinted(ids);
+    if (result.ok) {
+      setMarked(true);
+      router.refresh();
+      await loadBills();
+      return true;
+    }
+    setError(result.error);
+    return false;
+  }
+
   async function handleSinglePdf() {
     if (!billId) return;
     setLoadingPdf(true);
@@ -99,6 +113,7 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
       setPdfDoc(doc);
       setPdfFile(pdfFileName('labels', bundle.bill.bill_date, 1));
       setSelectedBulkIds([billId]);
+      await markBillIds([billId]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load this bill.');
     } finally {
@@ -135,7 +150,9 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
           );
       setPdfDoc(doc);
       setPdfFile(pdfFileName('labels', filterDate, bundles.length));
-      setSelectedBulkIds(bundles.map((b) => b.id));
+      const printedIds = bundles.map((b) => b.id);
+      setSelectedBulkIds(printedIds);
+      await markBillIds(printedIds);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load bills for bulk print.');
     } finally {
@@ -145,20 +162,7 @@ export function PrintClient({ layouts, initialDate, bulkPrintEnabled = true }: P
   }
 
   async function handleMarkPrinted(): Promise<boolean> {
-    if (selectedBulkIds.length === 0) return false;
-    const result =
-      selectedBulkIds.length === 1
-        ? await markBillPrinted(selectedBulkIds[0])
-        : await markBillsPrinted(selectedBulkIds);
-
-    if (result.ok) {
-      setMarked(true);
-      router.refresh();
-      await loadBills();
-      return true;
-    }
-    setError(result.error);
-    return false;
+    return markBillIds(selectedBulkIds);
   }
 
   return (

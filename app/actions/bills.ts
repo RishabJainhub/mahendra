@@ -343,20 +343,43 @@ export async function getBulkBillStickers(
 export async function markBillsPrinted(billIds: string[]): Promise<ActionResult<{ count: number }>> {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    const user = await requireUser();
     if (billIds.length === 0) return ok({ count: 0 });
 
     const supabase = await createClient();
+    const { data: visible, error: readError } = await supabase
+      .from('bills')
+      .select('id')
+      .in('id', billIds);
+
+    if (readError) {
+      logger.error('markBillsPrinted read failed', { reqId, error: readError.message });
+      return fail(readError.message);
+    }
+
+    const visibleIds = (visible ?? []).map((b) => b.id);
+    if (visibleIds.length === 0) {
+      return fail('No bills found or you do not have access.');
+    }
+
+    const service = createServiceClient();
     let count = 0;
     const chunkSize = 100;
 
-    for (let i = 0; i < billIds.length; i += chunkSize) {
-      const chunk = billIds.slice(i, i + chunkSize);
-      const { data, error } = await supabase
+    for (let i = 0; i < visibleIds.length; i += chunkSize) {
+      const chunk = visibleIds.slice(i, i + chunkSize);
+      let update = service
         .from('bills')
         .update({ status: 'printed' })
         .in('id', chunk)
-        .select('id');
+        .eq('tenant_id', user.tenant_id);
+
+      if (user.role === 'supplier') {
+        if (!user.supplier_id) return fail('Not authorized');
+        update = update.eq('supplier_id', user.supplier_id);
+      }
+
+      const { data, error } = await update.select('id');
 
       if (error) {
         logger.error('markBillsPrinted failed', { reqId, error: error.message });
@@ -1126,15 +1149,36 @@ export async function deleteBillAction(id: string): Promise<void> {
 export async function markBillPrinted(id: string): Promise<ActionResult<{ id: string }>> {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    const user = await requireUser();
     const supabase = await createClient();
 
-    const { data, error } = await supabase
+    const { data: bill, error: readError } = await supabase
+      .from('bills')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (readError) {
+      logger.error('markBillPrinted read failed', { reqId, error: readError.message });
+      return fail(readError.message);
+    }
+    if (!bill) {
+      logger.error('markBillPrinted not found', { reqId, id });
+      return fail('Bill not found or you do not have access.');
+    }
+
+    let update = createServiceClient()
       .from('bills')
       .update({ status: 'printed' })
       .eq('id', id)
-      .select('id')
-      .maybeSingle();
+      .eq('tenant_id', user.tenant_id);
+
+    if (user.role === 'supplier') {
+      if (!user.supplier_id) return fail('Not authorized');
+      update = update.eq('supplier_id', user.supplier_id);
+    }
+
+    const { data, error } = await update.select('id').maybeSingle();
 
     if (error) {
       logger.error('markBillPrinted failed', { reqId, error: error.message });

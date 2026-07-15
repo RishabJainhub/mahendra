@@ -56,6 +56,13 @@ export function PrintPageClient({ bills, layout, initialBillId }: Props) {
           ? `labels-roll-${sticker.bill.bill_number}.pdf`
           : `labels-${sticker.bill.bill_number}.pdf`
       );
+      const result = await markBillPrinted(billId);
+      if (result.ok) {
+        setMarked(true);
+        router.refresh();
+      } else {
+        setError(result.error);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load this bill.');
     } finally {
