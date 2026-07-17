@@ -32,21 +32,62 @@ async function hideBillFromPortal(
       ? { admin_hidden_at: new Date().toISOString() }
       : { supplier_hidden_at: new Date().toISOString() };
 
-  let query = createServiceClient()
-    .from('bills')
-    .update(patch)
-    .eq('id', billId)
-    .eq('tenant_id', user.tenant_id);
-
-  if (role === 'supplier') {
-    if (!user.supplier_id) {
-      return { data: null, error: { message: 'Not authorized' } };
+  const runUpdate = async (
+    client: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceClient>,
+    scopeSupplier: boolean
+  ) => {
+    if (scopeSupplier && !user.supplier_id) {
+      return { data: null as { id: string } | null, error: { message: 'Not authorized' } };
     }
-    query = query.eq('supplier_id', user.supplier_id);
+
+    let query = client.from('bills').update(patch).eq('id', billId);
+    if (scopeSupplier) {
+      query = query.eq('supplier_id', user.supplier_id!);
+    }
+
+    const { data, error } = await query.select('id');
+    if (error) {
+      return { data: null, error: { message: error.message } };
+    }
+    const row = data?.[0] ?? null;
+    if (!row) {
+      return { data: null, error: { message: 'Bill not found or could not be updated' } };
+    }
+    return { data: row, error: null };
+  };
+
+  // Prefer the signed-in session (admin/supplier RLS write policies).
+  const supabase = await createClient();
+  const sessionResult = await runUpdate(supabase, role === 'supplier');
+  if (sessionResult.data) {
+    return sessionResult;
   }
 
-  const { data, error } = await query.select('id').maybeSingle();
-  return { data, error };
+  // Fallback: service role by bill id after access was verified in deleteBill().
+  try {
+    const serviceResult = await runUpdate(createServiceClient(), role === 'supplier');
+    if (serviceResult.data) {
+      return serviceResult;
+    }
+    return {
+      data: null,
+      error: {
+        message:
+          serviceResult.error?.message ??
+          sessionResult.error?.message ??
+          'Could not remove bill',
+      },
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: {
+        message:
+          sessionResult.error?.message ??
+          (err instanceof Error ? err.message : 'Could not remove bill'),
+      },
+    };
+  }
 }
 
 export type BillFilters = {
@@ -1157,6 +1198,7 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
 
     revalidatePath('/admin');
     revalidatePath('/admin/bills');
+    revalidatePath(`/admin/bills/${id}`);
     revalidatePath('/admin/print');
     revalidatePath('/supplier');
     revalidatePath('/supplier/bills');
@@ -1165,7 +1207,8 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
     return ok({ id });
   } catch (err) {
     logger.error('deleteBill error', { reqId, err });
-    return fail('Delete failed');
+    const message = err instanceof Error ? err.message : 'Delete failed';
+    return fail(message.includes('service role') ? 'Delete failed — server configuration error' : message);
   }
 }
 
