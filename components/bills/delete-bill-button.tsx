@@ -12,6 +12,10 @@ type Props = {
   variant?: 'default' | 'destructive' | 'outline' | 'ghost' | 'secondary';
   className?: string;
   label?: string;
+  /** Admin delete hides from admin only; supplier delete hides from supplier only. */
+  adminOnly?: boolean;
+  /** Supplier delete hides from supplier only; admin keeps access. */
+  supplierOnly?: boolean;
 };
 
 export function DeleteBillButton({
@@ -21,6 +25,8 @@ export function DeleteBillButton({
   variant = 'destructive',
   className,
   label = 'Delete',
+  adminOnly = false,
+  supplierOnly = false,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -34,8 +40,12 @@ export function DeleteBillButton({
         setConfirming(false);
         return;
       }
-      if (redirectTo) router.push(redirectTo);
-      router.refresh();
+      setConfirming(false);
+      if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        router.refresh();
+      }
     });
   }
 
@@ -54,7 +64,13 @@ export function DeleteBillButton({
 
   return (
     <span className={className ?? 'inline-flex items-center gap-2'}>
-      <span className="text-xs text-muted-foreground">Delete bill {billNumber}?</span>
+      <span className="text-xs text-muted-foreground">
+        {adminOnly
+          ? `Remove bill ${billNumber} from admin only? The supplier keeps access.`
+          : supplierOnly
+            ? `Remove bill ${billNumber} from your portal only? Admin still keeps access.`
+            : `Remove bill ${billNumber}?`}
+      </span>
       <Button type="button" variant="destructive" disabled={pending} onClick={handleConfirm}>
         {pending ? 'Deleting…' : 'Confirm'}
       </Button>

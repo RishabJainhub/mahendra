@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import { requireAdmin, requireUser } from '@/lib/auth';
+import { requireAdmin, requireUser, type AppUser } from '@/lib/auth';
 import { ok, fail, fromZod, type ActionResult } from '@/lib/result';
 import { logger, newRequestId } from '@/lib/logger';
 import { writeAudit } from '@/lib/audit';
@@ -23,15 +23,30 @@ function round2(n: number): number {
 }
 
 async function hideBillFromPortal(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: AppUser,
   billId: string,
   role: 'admin' | 'supplier'
-) {
+): Promise<{ data: { id: string } | null; error: { message: string } | null }> {
   const patch =
     role === 'admin'
       ? { admin_hidden_at: new Date().toISOString() }
       : { supplier_hidden_at: new Date().toISOString() };
-  return supabase.from('bills').update(patch).eq('id', billId);
+
+  let query = createServiceClient()
+    .from('bills')
+    .update(patch)
+    .eq('id', billId)
+    .eq('tenant_id', user.tenant_id);
+
+  if (role === 'supplier') {
+    if (!user.supplier_id) {
+      return { data: null, error: { message: 'Not authorized' } };
+    }
+    query = query.eq('supplier_id', user.supplier_id);
+  }
+
+  const { data, error } = await query.select('id').maybeSingle();
+  return { data, error };
 }
 
 export type BillFilters = {
@@ -740,7 +755,7 @@ export async function importTallyBill(
       }
 
       const hideResult = await hideBillFromPortal(
-        supabase,
+        user,
         existing.id,
         user.role === 'admin' ? 'admin' : 'supplier'
       );
@@ -751,6 +766,9 @@ export async function importTallyBill(
           error: hideResult.error.message,
         });
         return fail(`Could not replace existing bill: ${hideResult.error.message}`);
+      }
+      if (!hideResult.data) {
+        return fail('Could not replace existing bill. Refresh and try again.');
       }
 
       await writeAudit('replace', 'bill', existing.id, {
@@ -1099,11 +1117,15 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
     }
 
     if (user.role === 'admin') {
-      const { error } = await hideBillFromPortal(supabase, id, 'admin');
+      const { data, error } = await hideBillFromPortal(user, id, 'admin');
 
       if (error) {
         logger.error('deleteBill admin hide failed', { reqId, error: error.message });
         return fail(error.message);
+      }
+      if (!data) {
+        logger.error('deleteBill admin hide no rows', { reqId, id });
+        return fail('Could not remove bill. If this keeps happening, contact support — database migrations may be pending.');
       }
 
       await writeAudit('hide', 'bill', id, {
@@ -1114,10 +1136,14 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
 
       logger.info('deleteBill admin hide success', { reqId, id });
     } else {
-      const { error } = await hideBillFromPortal(supabase, id, 'supplier');
+      const { data, error } = await hideBillFromPortal(user, id, 'supplier');
       if (error) {
         logger.error('deleteBill supplier hide failed', { reqId, error: error.message });
         return fail(error.message);
+      }
+      if (!data) {
+        logger.error('deleteBill supplier hide no rows', { reqId, id });
+        return fail('Could not remove bill. Refresh and try again.');
       }
 
       await writeAudit('hide', 'bill', id, {
@@ -1129,6 +1155,7 @@ export async function deleteBill(id: string): Promise<ActionResult<{ id: string 
       logger.info('deleteBill supplier hide success', { reqId, id });
     }
 
+    revalidatePath('/admin');
     revalidatePath('/admin/bills');
     revalidatePath('/admin/print');
     revalidatePath('/supplier');

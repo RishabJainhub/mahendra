@@ -140,6 +140,8 @@ export default async function AdminBillsPage({ searchParams }: Props) {
                         billNumber={bill.bill_number}
                         variant="ghost"
                         label="Delete"
+                        adminOnly
+                        redirectTo="/admin/bills"
                         className="h-8 px-2 text-destructive"
                       />
                     </div>
