@@ -58,7 +58,6 @@ export function QuickPrintToday({ variant = 'inline' }: { variant?: 'inline' | '
       setBundles(loaded);
       setMarked(false);
       setOpen(true);
-      await handleMarkPrinted();
     } finally {
       setLoading(false);
     }
