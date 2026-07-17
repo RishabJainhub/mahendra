@@ -1,4 +1,4 @@
-import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
+import { cleanItemNameForLabel, formatLabelLine1Name } from '@/lib/tally/clean-name';
 
 describe('cleanItemNameForLabel', () => {
   it('keeps only the item name before company code + DNA label', () => {
@@ -38,5 +38,20 @@ describe('cleanItemNameForLabel', () => {
   it('handles empty and whitespace input', () => {
     expect(cleanItemNameForLabel('')).toBe('');
     expect(cleanItemNameForLabel('   ')).toBe('');
+  });
+});
+
+describe('formatLabelLine1Name', () => {
+  it('appends company code after the cleaned item name', () => {
+    expect(formatLabelLine1Name('GAJJI AJRAK PATTA', 'DNX')).toBe('GAJJI AJRAK PATTA DNX');
+    expect(formatLabelLine1Name('G-3', 'NT')).toBe('G-3 NT');
+  });
+
+  it('does not duplicate company code if already present', () => {
+    expect(formatLabelLine1Name('GAJJI AJRAK PATTA DNX', 'DNX')).toBe('GAJJI AJRAK PATTA DNX');
+  });
+
+  it('returns name alone when no company code', () => {
+    expect(formatLabelLine1Name('SIDDHARTH SILK', '')).toBe('SIDDHARTH SILK');
   });
 });
