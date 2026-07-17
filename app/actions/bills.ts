@@ -22,26 +22,32 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+type HideBillMode = 'admin' | 'supplier' | 'both';
+
 async function hideBillFromPortal(
   user: AppUser,
   billId: string,
-  role: 'admin' | 'supplier'
+  mode: HideBillMode
 ): Promise<{ data: { id: string } | null; error: { message: string } | null }> {
+  const now = new Date().toISOString();
   const patch =
-    role === 'admin'
-      ? { admin_hidden_at: new Date().toISOString() }
-      : { supplier_hidden_at: new Date().toISOString() };
+    mode === 'admin'
+      ? { admin_hidden_at: now }
+      : mode === 'supplier'
+        ? { supplier_hidden_at: now }
+        : { admin_hidden_at: now, supplier_hidden_at: now };
+
+  const scopeToSupplier = mode === 'supplier' || (mode === 'both' && user.role === 'supplier');
 
   const runUpdate = async (
-    client: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceClient>,
-    scopeSupplier: boolean
+    client: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceClient>
   ) => {
-    if (scopeSupplier && !user.supplier_id) {
+    if (scopeToSupplier && !user.supplier_id) {
       return { data: null as { id: string } | null, error: { message: 'Not authorized' } };
     }
 
     let query = client.from('bills').update(patch).eq('id', billId);
-    if (scopeSupplier) {
+    if (scopeToSupplier) {
       query = query.eq('supplier_id', user.supplier_id!);
     }
 
@@ -58,14 +64,14 @@ async function hideBillFromPortal(
 
   // Prefer the signed-in session (admin/supplier RLS write policies).
   const supabase = await createClient();
-  const sessionResult = await runUpdate(supabase, role === 'supplier');
+  const sessionResult = await runUpdate(supabase);
   if (sessionResult.data) {
     return sessionResult;
   }
 
-  // Fallback: service role by bill id after access was verified in deleteBill().
+  // Fallback: service role by bill id after access was verified by the caller.
   try {
-    const serviceResult = await runUpdate(createServiceClient(), role === 'supplier');
+    const serviceResult = await runUpdate(createServiceClient());
     if (serviceResult.data) {
       return serviceResult;
     }
@@ -766,12 +772,41 @@ export async function importTallyBill(
 
     const supabase = await createClient();
 
-    const { data: existing } = await supabase
-      .from('bills')
-      .select('id, status, supplier:suppliers(name)')
-      .eq('supplier_id', supplierId)
-      .eq('bill_number', billData.number)
-      .maybeSingle();
+    // Look past portal soft-hides so we never create a second visible copy of the same bill #.
+    let existing: { id: string; status: string; supplier: { name?: string } | null } | null = null;
+    try {
+      const { data: anyExisting } = await createServiceClient()
+        .from('bills')
+        .select('id, status, admin_hidden_at, supplier_hidden_at, supplier:suppliers(name)')
+        .eq('tenant_id', user.tenant_id)
+        .eq('supplier_id', supplierId)
+        .eq('bill_number', billData.number)
+        .or('admin_hidden_at.is.null,supplier_hidden_at.is.null')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (anyExisting) {
+        existing = {
+          id: anyExisting.id,
+          status: anyExisting.status,
+          supplier: anyExisting.supplier as { name?: string } | null,
+        };
+      }
+    } catch {
+      const { data: visibleExisting } = await supabase
+        .from('bills')
+        .select('id, status, supplier:suppliers(name)')
+        .eq('supplier_id', supplierId)
+        .eq('bill_number', billData.number)
+        .maybeSingle();
+      existing = visibleExisting
+        ? {
+            id: visibleExisting.id,
+            status: visibleExisting.status,
+            supplier: visibleExisting.supplier as { name?: string } | null,
+          }
+        : null;
+    }
 
     if (existing) {
       const supplierName =
@@ -795,11 +830,9 @@ export async function importTallyBill(
         );
       }
 
-      const hideResult = await hideBillFromPortal(
-        user,
-        existing.id,
-        user.role === 'admin' ? 'admin' : 'supplier'
-      );
+      // Replace must retire the old row from BOTH portals, otherwise the other
+      // portal keeps the old copy and the unique indexes block / create confusion.
+      const hideResult = await hideBillFromPortal(user, existing.id, 'both');
       if (hideResult.error) {
         logger.error('importTallyBill replace hide failed', {
           reqId,
@@ -815,6 +848,7 @@ export async function importTallyBill(
       await writeAudit('replace', 'bill', existing.id, {
         billNumber: billData.number,
         supplierId,
+        hiddenFrom: 'both',
       });
     }
 
@@ -1296,18 +1330,33 @@ export async function createManualBill(input: {
 
     const supabase = await createClient();
 
-    const { data: existing } = await supabase
-      .from('bills')
-      .select('id')
-      .eq('supplier_id', supplierId)
-      .eq('bill_number', parsed.data.billNumber)
-      .maybeSingle();
+    let existingId: string | null = null;
+    try {
+      const { data: anyExisting } = await createServiceClient()
+        .from('bills')
+        .select('id')
+        .eq('tenant_id', user.tenant_id)
+        .eq('supplier_id', supplierId)
+        .eq('bill_number', parsed.data.billNumber)
+        .or('admin_hidden_at.is.null,supplier_hidden_at.is.null')
+        .limit(1)
+        .maybeSingle();
+      existingId = anyExisting?.id ?? null;
+    } catch {
+      const { data: visibleExisting } = await supabase
+        .from('bills')
+        .select('id')
+        .eq('supplier_id', supplierId)
+        .eq('bill_number', parsed.data.billNumber)
+        .maybeSingle();
+      existingId = visibleExisting?.id ?? null;
+    }
 
-    if (existing) {
+    if (existingId) {
       return fail(
         `Bill ${parsed.data.billNumber} already exists for this supplier. Use a different bill number or delete the existing one first.`,
         'DUPLICATE_BILL',
-        { existingBillId: existing.id, billNumber: parsed.data.billNumber }
+        { existingBillId: existingId, billNumber: parsed.data.billNumber }
       );
     }
 
