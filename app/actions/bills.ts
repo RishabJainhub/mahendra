@@ -109,7 +109,7 @@ export type BillFilters = {
 export async function getBills(filters: BillFilters = {}) {
   const reqId = newRequestId();
   try {
-    await requireUser();
+    const user = await requireUser();
     const supabase = await createClient();
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 20;
@@ -121,6 +121,13 @@ export async function getBills(filters: BillFilters = {}) {
       .select('*, supplier:suppliers(name), bill_items(count)', { count: 'exact' })
       .order('bill_date', { ascending: false })
       .range(from, to);
+
+    // Soft-delete visibility (also enforced by RLS — keep explicit for safety).
+    if (user.role === 'admin') {
+      query = query.is('admin_hidden_at', null);
+    } else {
+      query = query.is('supplier_hidden_at', null);
+    }
 
     if (filters.status) query = query.eq('status', filters.status);
     if (filters.supplierId) query = query.eq('supplier_id', filters.supplierId);
@@ -294,6 +301,7 @@ export async function getPrintableBills(filters: {
       let query = supabase
         .from('bills')
         .select('id, bill_number, bill_date, status, supplier:suppliers(name)', { count: 'exact' })
+        .is('admin_hidden_at', null)
         .order('bill_date', { ascending: false })
         .order('bill_number', { ascending: true })
         .range(offset, offset + BILL_LIST_PAGE - 1);

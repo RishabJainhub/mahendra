@@ -15,7 +15,8 @@ export default async function AdminDashboardPage() {
     const { count } = await supabase
       .from('bills')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'imported');
+      .eq('status', 'imported')
+      .is('admin_hidden_at', null);
     unprintedCount = count ?? 0;
   } catch {
     /* non-fatal */
