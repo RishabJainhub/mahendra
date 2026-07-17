@@ -9,10 +9,18 @@ import {
   type ExpandedLabel,
   type LabelGrid,
 } from '@/lib/pdf/layout';
+import {
+  A4_LABEL_HORIZONTAL_PADDING_PT,
+  A4_LINE1_MAX_FONT,
+  A4_LINE1_MIN_FONT,
+  fitLabelDescriptionLine,
+  ROLL_LINE1_FIT,
+} from '@/lib/pdf/fit-label-line';
 import type { BillItemPDF, BillPDFData, BillStickerBundle, LayoutPDF } from '@/lib/pdf/types';
 
 export type { BillPDFData, BillItemPDF, LayoutPDF, BillStickerBundle } from '@/lib/pdf/types';
 export { labelsPerPage, expandBillLabels, computeLabelGrid } from '@/lib/pdf/layout';
+export { fitLabelDescriptionLine, ROLL_LINE1_FIT } from '@/lib/pdf/fit-label-line';
 
 /** Fallback layout when none is configured in the DB.
  *  Matches the reference sticker: ~60mm × 25mm landscape, 4 centered lines. */
@@ -30,24 +38,6 @@ export const DEFAULT_LABEL_LAYOUT: LayoutPDF = {
 export const LABEL_ROLL_WIDTH_PT = 141.73; // 50mm (print-head width)
 export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm (feed direction)
 
-/**
- * Max characters that fit on one line of a 50mm roll label at the given font
- * size. The label is 141pt wide with 6pt horizontal padding → ~135pt usable.
- * At 14pt Helvetica-Bold the average glyph advance is ~7.5pt, so ~18 chars.
- * We err on the safe side and truncate to 16 with an ellipsis so the
- * description NEVER wraps to a second line (which would push the DNA/MA lines
- * onto the next sticker).
- */
-const ROLL_DESC_MAX_CHARS = 16;
-const A4_DESC_MAX_CHARS = 22;
-
-/** Truncate to a single line. Long descriptions get an ellipsis — they never wrap. */
-function truncateForLabel(text: string, maxChars: number): string {
-  const trimmed = (text ?? '').trim().replace(/\s+/g, ' ');
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, Math.max(1, maxChars - 1))}…`;
-}
-
 const rollStyles = StyleSheet.create({
   rollPage: {
     flex: 1,
@@ -64,8 +54,7 @@ const rollStyles = StyleSheet.create({
     alignItems: 'center',
   },
   rollLine1: {
-    // Item description — biggest line, wraps if long.
-    fontSize: 14,
+    // Item description — font size set per label so long names shrink instead of "…".
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     textAlign: 'center',
@@ -110,7 +99,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   line1: {
-    fontSize: 8,
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     textAlign: 'center',
@@ -178,6 +166,12 @@ function LabelCell({
     ? `${companyCode}(${itemHsn})`
     : companyCode || itemHsn || '';
   const safeHeight = Math.max(grid.labelHeight, MIN_LABEL_HEIGHT);
+  const description = cleanItemNameForLabel(label.item.description, companyCode);
+  const line1 = fitLabelDescriptionLine(description, {
+    maxWidthPt: Math.max(40, grid.labelWidth - A4_LABEL_HORIZONTAL_PADDING_PT),
+    maxFontSize: A4_LINE1_MAX_FONT,
+    minFontSize: A4_LINE1_MIN_FONT,
+  });
   return (
     <View
       key={label.key}
@@ -186,9 +180,7 @@ function LabelCell({
         { width: grid.labelWidth, minHeight: safeHeight },
       ]}
     >
-      <Text style={styles.line1}>
-        {truncateForLabel(cleanItemNameForLabel(label.item.description, companyCode), A4_DESC_MAX_CHARS)}
-      </Text>
+      <Text style={[styles.line1, { fontSize: line1.fontSize }]}>{line1.text}</Text>
       {line2 ? <Text style={styles.line2}>{line2}</Text> : null}
       <Text style={styles.line3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
       <Text style={styles.line4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
@@ -272,6 +264,8 @@ export function renderLabelRollPDF(
         const line2 = companyCode && itemHsn
           ? `${companyCode}(${itemHsn})`
           : companyCode || itemHsn || '';
+        const description = cleanItemNameForLabel(label.item.description, companyCode);
+        const line1 = fitLabelDescriptionLine(description, ROLL_LINE1_FIT);
         return (
           <Page
             key={key}
@@ -279,9 +273,7 @@ export function renderLabelRollPDF(
             style={rollStyles.rollPage}
           >
             <View style={rollStyles.rollContent}>
-              <Text style={rollStyles.rollLine1}>
-                {truncateForLabel(cleanItemNameForLabel(label.item.description, companyCode), ROLL_DESC_MAX_CHARS)}
-              </Text>
+              <Text style={[rollStyles.rollLine1, { fontSize: line1.fontSize }]}>{line1.text}</Text>
               {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
               <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
               <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
