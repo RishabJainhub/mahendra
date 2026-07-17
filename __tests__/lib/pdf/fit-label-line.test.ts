@@ -4,7 +4,19 @@ describe('fitLabelDescriptionLine', () => {
   it('keeps full short text at max font size', () => {
     const result = fitLabelDescriptionLine('S/N1102', ROLL_LINE1_FIT);
     expect(result.text).toBe('S/N1102');
-    expect(result.fontSize).toBe(14);
+    expect(result.fontSize).toBe(13);
+  });
+
+  it('keeps NEW AJRAK GALLA CHOKDA on one line without wrapping or ellipsis', () => {
+    const name = 'NEW AJRAK GALLA CHOKDA';
+    const result = fitLabelDescriptionLine(name, ROLL_LINE1_FIT);
+    expect(result.text).toBe(name);
+    expect(result.text).not.toContain('…');
+    expect(result.fontSize).toBeLessThanOrEqual(13);
+    // Must fit roll width at chosen size (conservative estimate).
+    expect(result.text.length * result.fontSize * 0.65).toBeLessThanOrEqual(
+      ROLL_LINE1_FIT.maxWidthPt
+    );
   });
 
   it('does not truncate long names with ellipsis', () => {
