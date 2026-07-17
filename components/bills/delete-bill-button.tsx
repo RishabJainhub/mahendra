@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteBill } from '@/app/actions/bills';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 
 type Props = {
   billId: string;
@@ -29,6 +30,7 @@ export function DeleteBillButton({
   supplierOnly = false,
 }: Props) {
   const router = useRouter();
+  const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
 
@@ -36,16 +38,30 @@ export function DeleteBillButton({
     startTransition(async () => {
       const result = await deleteBill(billId);
       if (!result.ok) {
-        alert(result.error ?? 'Could not delete bill');
+        toast({
+          title: 'Delete failed',
+          description: result.error ?? 'Could not delete bill',
+          variant: 'destructive',
+        });
         setConfirming(false);
         return;
       }
+
       setConfirming(false);
+      toast({
+        title: adminOnly
+          ? 'Removed from admin'
+          : supplierOnly
+            ? 'Removed from your portal'
+            : 'Bill removed',
+        description: `Bill ${billNumber}`,
+        variant: 'success',
+      });
+
       if (redirectTo) {
-        router.push(redirectTo);
-      } else {
-        router.refresh();
+        router.replace(redirectTo);
       }
+      router.refresh();
     });
   }
 
@@ -63,7 +79,7 @@ export function DeleteBillButton({
   }
 
   return (
-    <span className={className ?? 'inline-flex items-center gap-2'}>
+    <span className="inline-flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">
         {adminOnly
           ? `Remove bill ${billNumber} from admin only? The supplier keeps access.`
