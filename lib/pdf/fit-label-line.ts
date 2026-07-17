@@ -1,5 +1,6 @@
-/** Average glyph width as a fraction of font size (Helvetica-Bold, uppercase). */
-const CHAR_WIDTH_RATIO = 0.56;
+/** Average glyph width as a fraction of font size (Helvetica-Bold, uppercase).
+ *  Slightly conservative so long names shrink enough and never wrap onto a 2nd line. */
+const CHAR_WIDTH_RATIO = 0.65;
 
 export type FitLabelLineOptions = {
   /** Usable horizontal space in PDF points. */
@@ -29,9 +30,6 @@ export function fitLabelDescriptionLine(
   if (!normalized) {
     return { text: '', fontSize: maxFontSize };
   }
-  if (normalized.length === 0) {
-    return { text: normalized, fontSize: maxFontSize };
-  }
 
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 0.5) {
     const estimatedWidth = normalized.length * fontSize * CHAR_WIDTH_RATIO;
@@ -43,11 +41,11 @@ export function fitLabelDescriptionLine(
   return { text: normalized, fontSize: minFontSize };
 }
 
-/** Argox roll label — 50mm wide, ~6pt horizontal padding. */
+/** Argox roll label — 50mm wide, padding reserved so name stays on one line. */
 export const ROLL_LINE1_FIT: FitLabelLineOptions = {
-  maxWidthPt: 132,
-  maxFontSize: 14,
-  minFontSize: 5,
+  maxWidthPt: 128,
+  maxFontSize: 13,
+  minFontSize: 4,
 };
 
 /** Default A4 sticker cell — width varies; use label width minus padding at render time. */

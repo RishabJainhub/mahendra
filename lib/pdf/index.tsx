@@ -40,45 +40,51 @@ export const LABEL_ROLL_HEIGHT_PT = 70.87; // 25mm (feed direction)
 
 const rollStyles = StyleSheet.create({
   rollPage: {
-    flex: 1,
+    width: '100%',
+    height: '100%',
     paddingHorizontal: 3,
-    paddingVertical: 2,
+    paddingVertical: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   rollContent: {
-    // Wrapper View that actually performs the centering inside the Page.
-    flex: 1,
     width: '100%',
+    maxHeight: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   rollLine1: {
-    // Item description — font size set per label so long names shrink instead of "…".
+    // Full item name on ONE line — font size shrinks; never wraps / never "…".
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     textAlign: 'center',
-    marginBottom: 1,
+    marginBottom: 0.5,
+    maxWidth: '100%',
   },
   rollLine2: {
-    // Supplier code (HSN) — secondary line.
-    fontSize: 11,
+    // Company code (HSN) — secondary line.
+    fontSize: 10,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
-    marginBottom: 1,
+    marginBottom: 0.5,
+    maxWidth: '100%',
   },
   rollLine3: {
     // MA price — prominent.
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
-    marginBottom: 1,
+    marginBottom: 0.5,
+    maxWidth: '100%',
   },
   rollLine4: {
-    // DNA price — prominent.
-    fontSize: 16,
+    // DNA price — must stay on THIS sticker, never spill to the next page.
+    fontSize: 14,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
+    maxWidth: '100%',
   },
 });
 
@@ -180,10 +186,20 @@ function LabelCell({
         { width: grid.labelWidth, minHeight: safeHeight },
       ]}
     >
-      <Text style={[styles.line1, { fontSize: line1.fontSize }]}>{line1.text}</Text>
-      {line2 ? <Text style={styles.line2}>{line2}</Text> : null}
-      <Text style={styles.line3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
-      <Text style={styles.line4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+      <Text style={[styles.line1, { fontSize: line1.fontSize }]} wrap={false}>
+        {line1.text}
+      </Text>
+      {line2 ? (
+        <Text style={styles.line2} wrap={false}>
+          {line2}
+        </Text>
+      ) : null}
+      <Text style={styles.line3} wrap={false}>
+        MA{formatLabelPrice(label.item.ma_price)}B
+      </Text>
+      <Text style={styles.line4} wrap={false}>
+        DNA{formatLabelPrice(label.item.dna_price)}B
+      </Text>
     </View>
   );
 }
@@ -271,12 +287,23 @@ export function renderLabelRollPDF(
             key={key}
             size={[LABEL_ROLL_WIDTH_PT, LABEL_ROLL_HEIGHT_PT]}
             style={rollStyles.rollPage}
+            wrap={false}
           >
-            <View style={rollStyles.rollContent}>
-              <Text style={[rollStyles.rollLine1, { fontSize: line1.fontSize }]}>{line1.text}</Text>
-              {line2 ? <Text style={rollStyles.rollLine2}>{line2}</Text> : null}
-              <Text style={rollStyles.rollLine3}>MA{formatLabelPrice(label.item.ma_price)}B</Text>
-              <Text style={rollStyles.rollLine4}>DNA{formatLabelPrice(label.item.dna_price)}B</Text>
+            <View style={rollStyles.rollContent} wrap={false}>
+              <Text style={[rollStyles.rollLine1, { fontSize: line1.fontSize }]} wrap={false}>
+                {line1.text}
+              </Text>
+              {line2 ? (
+                <Text style={rollStyles.rollLine2} wrap={false}>
+                  {line2}
+                </Text>
+              ) : null}
+              <Text style={rollStyles.rollLine3} wrap={false}>
+                MA{formatLabelPrice(label.item.ma_price)}B
+              </Text>
+              <Text style={rollStyles.rollLine4} wrap={false}>
+                DNA{formatLabelPrice(label.item.dna_price)}B
+              </Text>
             </View>
           </Page>
         );
