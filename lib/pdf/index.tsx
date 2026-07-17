@@ -1,7 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
-import { formatINR, formatLabelPrice } from '@/lib/pricing';
-import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
+import { formatINR } from '@/lib/pricing';
 import {
   chunkLabelsForPages,
   computeLabelGrid,
@@ -9,18 +8,13 @@ import {
   type ExpandedLabel,
   type LabelGrid,
 } from '@/lib/pdf/layout';
-import {
-  A4_LABEL_HORIZONTAL_PADDING_PT,
-  A4_LINE1_MAX_FONT,
-  A4_LINE1_MIN_FONT,
-  fitLabelDescriptionLine,
-  ROLL_LINE1_FIT,
-} from '@/lib/pdf/fit-label-line';
+import { buildStickerLines } from '@/lib/pdf/sticker-lines';
 import type { BillItemPDF, BillPDFData, BillStickerBundle, LayoutPDF } from '@/lib/pdf/types';
 
 export type { BillPDFData, BillItemPDF, LayoutPDF, BillStickerBundle } from '@/lib/pdf/types';
 export { labelsPerPage, expandBillLabels, computeLabelGrid } from '@/lib/pdf/layout';
 export { fitLabelDescriptionLine, ROLL_LINE1_FIT } from '@/lib/pdf/fit-label-line';
+export { buildStickerLines } from '@/lib/pdf/sticker-lines';
 
 /** Fallback layout when none is configured in the DB.
  *  Matches the reference sticker: ~60mm × 25mm landscape, 4 centered lines. */
@@ -166,18 +160,13 @@ function LabelCell({
   bill: BillPDFData;
   grid: LabelGrid;
 }) {
-  const companyCode = bill.supplier_code;
-  const itemHsn = label.item.hsn;
-  const line2 = companyCode && itemHsn
-    ? `${companyCode}(${itemHsn})`
-    : companyCode || itemHsn || '';
   const safeHeight = Math.max(grid.labelHeight, MIN_LABEL_HEIGHT);
-  const description = cleanItemNameForLabel(label.item.description, companyCode);
-  const line1 = fitLabelDescriptionLine(description, {
-    maxWidthPt: Math.max(40, grid.labelWidth - A4_LABEL_HORIZONTAL_PADDING_PT),
-    maxFontSize: A4_LINE1_MAX_FONT,
-    minFontSize: A4_LINE1_MIN_FONT,
-  });
+  const { line1, line2, line3, line4 } = buildStickerLines(
+    label.item,
+    bill.supplier_code,
+    'a4',
+    grid.labelWidth
+  );
   return (
     <View
       key={label.key}
@@ -195,10 +184,10 @@ function LabelCell({
         </Text>
       ) : null}
       <Text style={styles.line3} wrap={false}>
-        MA{formatLabelPrice(label.item.ma_price)}B
+        {line3}
       </Text>
       <Text style={styles.line4} wrap={false}>
-        DNA{formatLabelPrice(label.item.dna_price)}B
+        {line4}
       </Text>
     </View>
   );
@@ -275,13 +264,11 @@ export function renderLabelRollPDF(
   return (
     <Document>
       {allLabels.map(({ label, bill, key }) => {
-        const companyCode = bill.supplier_code;
-        const itemHsn = label.item.hsn;
-        const line2 = companyCode && itemHsn
-          ? `${companyCode}(${itemHsn})`
-          : companyCode || itemHsn || '';
-        const description = cleanItemNameForLabel(label.item.description, companyCode);
-        const line1 = fitLabelDescriptionLine(description, ROLL_LINE1_FIT);
+        const { line1, line2, line3, line4 } = buildStickerLines(
+          label.item,
+          bill.supplier_code,
+          'roll'
+        );
         return (
           <Page
             key={key}
@@ -299,10 +286,10 @@ export function renderLabelRollPDF(
                 </Text>
               ) : null}
               <Text style={rollStyles.rollLine3} wrap={false}>
-                MA{formatLabelPrice(label.item.ma_price)}B
+                {line3}
               </Text>
               <Text style={rollStyles.rollLine4} wrap={false}>
-                DNA{formatLabelPrice(label.item.dna_price)}B
+                {line4}
               </Text>
             </View>
           </Page>

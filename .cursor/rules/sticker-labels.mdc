@@ -1,0 +1,35 @@
+---
+description: Universal sticker label layout for all bills (Argox roll + A4)
+globs: lib/pdf/**/*.{ts,tsx},components/pdf/**/*.{ts,tsx},app/**/print/**/*.{ts,tsx},app/api/**/stickers/**
+alwaysApply: false
+---
+
+# Sticker label layout — universal, non-negotiable
+
+Applies to **every** bill, supplier, and print path (roll Argox, A4, CSV export, preview). Do not ask the user to reconfirm these rules. Do not invent alternate layouts.
+
+## Four lines on ONE sticker
+
+| Line | Content |
+|------|---------|
+| 1 | Full item name only — **single line**, shrink font to fit, **never** `…` / truncate / wrap to line 2 |
+| 2 | Company code + HSN only — e.g. `DNX(540752)`. Company code is **never** on line 1 |
+| 3 | `MA{price}B` |
+| 4 | `DNA{price}B` |
+
+## Hard constraints
+
+1. **One sticker = one item copy.** Name, company code, MA, and DNA must never spill onto the next PDF page / next physical label.
+2. Long names → smaller font via `fitLabelDescriptionLine` + `wrap={false}`. Never split the name across lines or stickers.
+3. Company code comes from the supplier profile (`supplier_code`), HSN from the bill line item.
+4. Clean Tally noise with `cleanItemNameForLabel` (strip embedded DNA/MA sticker text and trailing company code from the description).
+5. Status → printed only on **Print** or **Download PDF**, not on preview / modal open / generate.
+
+## Implementation
+
+- Roll: `renderLabelRollPDF` in `lib/pdf/index.tsx`
+- A4: `LabelCell` in the same file
+- Name fitting: `lib/pdf/fit-label-line.ts`
+- Name cleaning: `lib/tally/clean-name.ts`
+
+If a change would put DNA alone on a second sticker, wrap the name, or append the company code to line 1 — **reject that change**.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBulkBillStickers } from '@/app/actions/bills';
 import { createClient } from '@/lib/supabase/server';
-import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
+import { buildStickerLines } from '@/lib/pdf/sticker-lines';
 
 function csvField(value: string | number): string {
   const s = String(value ?? '');
@@ -9,12 +9,6 @@ function csvField(value: string | number): string {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
-}
-
-function stickerLabel(prefix: string, value: number): string {
-  // Match formatLabelPrice — strip trailing .00 if integer
-  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
-  return `${prefix}${formatted}B`;
 }
 
 export async function GET(request: NextRequest) {
@@ -39,17 +33,13 @@ export async function GET(request: NextRequest) {
     const rows: string[] = [header.join(',')];
 
     for (const bundle of bundles) {
-      const companyCode = bundle.bill.supplier_code;
       for (const item of bundle.items) {
-        const itemHsn = item.hsn ?? '';
-        const codeHsn = companyCode && itemHsn
-          ? `${companyCode}(${itemHsn})`
-          : companyCode || itemHsn;
+        const lines = buildStickerLines(item, bundle.bill.supplier_code, 'roll');
         rows.push([
-          csvField(cleanItemNameForLabel(item.description, companyCode)),
-          csvField(codeHsn),
-          csvField(stickerLabel('MA', item.ma_price)),
-          csvField(stickerLabel('DNA', item.dna_price)),
+          csvField(lines.line1.text),
+          csvField(lines.line2),
+          csvField(lines.line3),
+          csvField(lines.line4),
           csvField(item.qty),
         ].join(','));
       }
