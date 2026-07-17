@@ -19,11 +19,13 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const { count: totalBills } = await supabase
     .from('bills')
-    .select('*', { count: 'exact', head: true });
+    .select('*', { count: 'exact', head: true })
+    .is('admin_hidden_at', null);
 
   const { data: allBills } = await supabase
     .from('bills')
     .select('total_amount, status')
+    .is('admin_hidden_at', null)
     .neq('status', 'cancelled');
 
   const bills = allBills ?? [];
@@ -38,6 +40,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const { count: billsToday } = await supabase
     .from('bills')
     .select('*', { count: 'exact', head: true })
+    .is('admin_hidden_at', null)
     .gte('created_at', `${today}T00:00:00+05:30`);
 
   return {
