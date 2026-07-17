@@ -23,6 +23,16 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Line 1 on stickers: item name followed by the supplier company code (e.g. "… PATTA DNX"). */
+export function formatLabelLine1Name(cleanedName: string, companyCode?: string): string {
+  const name = cleanedName.trim();
+  const code = (companyCode ?? '').trim();
+  if (!name) return code;
+  if (!code) return name;
+  if (new RegExp(`\\s+${escapeRegExp(code)}\\s*$`, 'i').test(name)) return name;
+  return `${name} ${code}`;
+}
+
 export function cleanItemNameForLabel(raw: string, companyCode?: string): string {
   if (!raw) return '';
 

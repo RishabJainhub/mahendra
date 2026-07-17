@@ -1,7 +1,7 @@
 import React from 'react';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { formatINR, formatLabelPrice } from '@/lib/pricing';
-import { cleanItemNameForLabel } from '@/lib/tally/clean-name';
+import { cleanItemNameForLabel, formatLabelLine1Name } from '@/lib/tally/clean-name';
 import {
   chunkLabelsForPages,
   computeLabelGrid,
@@ -166,7 +166,10 @@ function LabelCell({
     ? `${companyCode}(${itemHsn})`
     : companyCode || itemHsn || '';
   const safeHeight = Math.max(grid.labelHeight, MIN_LABEL_HEIGHT);
-  const description = cleanItemNameForLabel(label.item.description, companyCode);
+  const description = formatLabelLine1Name(
+    cleanItemNameForLabel(label.item.description, companyCode),
+    companyCode
+  );
   const line1 = fitLabelDescriptionLine(description, {
     maxWidthPt: Math.max(40, grid.labelWidth - A4_LABEL_HORIZONTAL_PADDING_PT),
     maxFontSize: A4_LINE1_MAX_FONT,
@@ -264,7 +267,10 @@ export function renderLabelRollPDF(
         const line2 = companyCode && itemHsn
           ? `${companyCode}(${itemHsn})`
           : companyCode || itemHsn || '';
-        const description = cleanItemNameForLabel(label.item.description, companyCode);
+        const description = formatLabelLine1Name(
+    cleanItemNameForLabel(label.item.description, companyCode),
+    companyCode
+  );
         const line1 = fitLabelDescriptionLine(description, ROLL_LINE1_FIT);
         return (
           <Page
