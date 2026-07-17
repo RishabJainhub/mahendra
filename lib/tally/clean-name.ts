@@ -23,14 +23,10 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Line 1 on stickers: item name followed by the supplier company code (e.g. "… PATTA DNX"). */
-export function formatLabelLine1Name(cleanedName: string, companyCode?: string): string {
-  const name = cleanedName.trim();
+function stripTrailingCompanyCode(text: string, companyCode?: string): string {
   const code = (companyCode ?? '').trim();
-  if (!name) return code;
-  if (!code) return name;
-  if (new RegExp(`\\s+${escapeRegExp(code)}\\s*$`, 'i').test(name)) return name;
-  return `${name} ${code}`;
+  if (!code || !text) return text;
+  return text.replace(new RegExp(`\\s+${escapeRegExp(code)}\\s*$`, 'i'), '').trim();
 }
 
 export function cleanItemNameForLabel(raw: string, companyCode?: string): string {
@@ -60,11 +56,14 @@ export function cleanItemNameForLabel(raw: string, companyCode?: string): string
 
   // No DNA/MA label — strip amounts, units, decimals, and GST/HSN tails but
   // keep standalone numbers (they may be HSNs or part of the name).
-  return raw
+  const cleaned = raw
     .replace(/\d+\s*%\s*\d{4,8}/gi, ' ')
     .replace(/\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?/g, ' ')
     .replace(/\d+\.\d{2}/g, ' ')
     .replace(/\b(PCS|NOS|MTRS?|MT|KG|GMS?|GM|BOXES?|PR|PRS|SET|SETS?)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Company code is printed on line 2 only — remove if it appears at the end of the name.
+  return stripTrailingCompanyCode(cleaned, companyCode);
 }
