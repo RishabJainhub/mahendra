@@ -38,31 +38,35 @@ describe('pricing', () => {
     expect(calcMA(1000, rule)).toBe(1461);
   });
 
-  it('calcDNA: rate × 1.20 then MU5% (hybrid), round to nearest 5 with rem≤2 down', () => {
-    // 1250 × 1.20 = 1500 → 1500 / 0.95 = 1578.95 → 1578 rem 3 → 1580
+  it('calcDNA: rate × 1.20 then MU5% (hybrid), last-digit round to 5', () => {
+    // 1250 × 1.20 = 1500 → 1500 / 0.95 = 1578.95 → 1578 ends 8 → 1580
     expect(calcDNA(1250, rule)).toBe(1580);
-    // 1600 × 1.20 = 1920 → 1920 / 0.95 = 2021.05 → 2021 rem 1 → 2020
+    // 1600 × 1.20 = 1920 → 1920 / 0.95 = 2021.05 → 2021 ends 1 → 2020
     expect(calcDNA(1600, rule)).toBe(2020);
-    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → 5052 rem 2 → 5050
+    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → 5052 ends 2 → 5050
     expect(calcDNA(4000, rule)).toBe(5050);
-    // 1000 × 1.20 = 1200 → 1200 / 0.95 = 1263.16 → 1263 rem 3 → 1265
+    // 1000 × 1.20 = 1200 → 1200 / 0.95 = 1263.16 → 1263 ends 3 → 1265
     expect(calcDNA(1000, rule)).toBe(1265);
   });
 
-  it('roundUpToNearest: rem 0/1/2 down, rem 3/4 up to multiple of 5', () => {
+  it('roundUpToNearest: last digit 0-2→0, 3-4→5, 5 stay, 6-9→next 0', () => {
     expect(roundUpToNearest(2070, 5)).toBe(2070);
     expect(roundUpToNearest(2071, 5)).toBe(2070);
     expect(roundUpToNearest(2072, 5)).toBe(2070);
     expect(roundUpToNearest(2073, 5)).toBe(2075);
     expect(roundUpToNearest(2074, 5)).toBe(2075);
     expect(roundUpToNearest(2075, 5)).toBe(2075);
+    expect(roundUpToNearest(2076, 5)).toBe(2080);
+    expect(roundUpToNearest(2077, 5)).toBe(2080);
+    expect(roundUpToNearest(2078, 5)).toBe(2080);
+    expect(roundUpToNearest(2079, 5)).toBe(2080);
     expect(roundUpToNearest(2051, 5)).toBe(2050);
     expect(roundUpToNearest(2054, 5)).toBe(2055);
-    expect(roundUpToNearest(2056, 5)).toBe(2055);
+    expect(roundUpToNearest(2056, 5)).toBe(2060);
     expect(roundUpToNearest(2059, 5)).toBe(2060);
     expect(roundUpToNearest(2070.34, 5)).toBe(2070);
     expect(roundUpToNearest(2072.99, 5)).toBe(2070);
-    expect(roundUpToNearest(2073.01, 5)).toBe(2075);
+    expect(roundUpToNearest(2076.01, 5)).toBe(2080);
     expect(roundUpToNearest(0, 5)).toBe(0);
   });
 
