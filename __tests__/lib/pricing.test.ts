@@ -38,26 +38,31 @@ describe('pricing', () => {
     expect(calcMA(1000, rule)).toBe(1461);
   });
 
-  it('calcDNA: rate × 1.20 then MU5% (hybrid), round up to nearest 5', () => {
-    // 1250 × 1.20 = 1500 → 1500 / 0.95 = 1578.95 → round up to 5 = 1580
+  it('calcDNA: rate × 1.20 then MU5% (hybrid), round to nearest 5 with rem≤2 down', () => {
+    // 1250 × 1.20 = 1500 → 1500 / 0.95 = 1578.95 → 1578 rem 3 → 1580
     expect(calcDNA(1250, rule)).toBe(1580);
-    // 1600 × 1.20 = 1920 → 1920 / 0.95 = 2021.05 → round up to 5 = 2025
-    expect(calcDNA(1600, rule)).toBe(2025);
-    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → round up to 5 = 5055
-    expect(calcDNA(4000, rule)).toBe(5055);
-    // 1000 × 1.20 = 1200 → 1200 / 0.95 = 1263.16 → round up to 5 = 1265
+    // 1600 × 1.20 = 1920 → 1920 / 0.95 = 2021.05 → 2021 rem 1 → 2020
+    expect(calcDNA(1600, rule)).toBe(2020);
+    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → 5052 rem 2 → 5050
+    expect(calcDNA(4000, rule)).toBe(5050);
+    // 1000 × 1.20 = 1200 → 1200 / 0.95 = 1263.16 → 1263 rem 3 → 1265
     expect(calcDNA(1000, rule)).toBe(1265);
   });
 
-  it('roundUpToNearest: floor-then-ceil (decimals at a multiple stay)', () => {
-    expect(roundUpToNearest(2051, 5)).toBe(2055);
+  it('roundUpToNearest: rem 0/1/2 down, rem 3/4 up to multiple of 5', () => {
+    expect(roundUpToNearest(2070, 5)).toBe(2070);
+    expect(roundUpToNearest(2071, 5)).toBe(2070);
+    expect(roundUpToNearest(2072, 5)).toBe(2070);
+    expect(roundUpToNearest(2073, 5)).toBe(2075);
+    expect(roundUpToNearest(2074, 5)).toBe(2075);
+    expect(roundUpToNearest(2075, 5)).toBe(2075);
+    expect(roundUpToNearest(2051, 5)).toBe(2050);
     expect(roundUpToNearest(2054, 5)).toBe(2055);
-    expect(roundUpToNearest(2056, 5)).toBe(2060);
+    expect(roundUpToNearest(2056, 5)).toBe(2055);
     expect(roundUpToNearest(2059, 5)).toBe(2060);
-    expect(roundUpToNearest(2050, 5)).toBe(2050);
     expect(roundUpToNearest(2070.34, 5)).toBe(2070);
-    expect(roundUpToNearest(2075.01, 5)).toBe(2075);
-    expect(roundUpToNearest(2050.99, 5)).toBe(2050);
+    expect(roundUpToNearest(2072.99, 5)).toBe(2070);
+    expect(roundUpToNearest(2073.01, 5)).toBe(2075);
     expect(roundUpToNearest(0, 5)).toBe(0);
   });
 
@@ -70,7 +75,7 @@ describe('pricing', () => {
       gst_pct: 5,
     };
     expect(calcMA(1000, dnaOnly)).toBe(1000);
-    // 1000 × 1.10 = 1100 → 1100 / 1.0 = 1100 → round up to 5 = 1100
+    // 1000 × 1.10 = 1100 → already on a multiple of 5
     expect(calcDNA(1000, dnaOnly)).toBe(1100);
   });
 

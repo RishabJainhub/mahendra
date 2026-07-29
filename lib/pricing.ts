@@ -48,7 +48,7 @@ export function applyConsecutiveMU(
  *   step2 = step1 / (1 - m2/100)  — calculator MU
  *
  * Example: rate 1600, m1=22, m2=5 → 1600 × 1.22 = 1952 → 1952 / 0.95 = 2054.74
- * → round up to 5 → 2055.
+ * → DNA round-to-5 → 2055.
  */
 export function applyMarkupThenMU(
   rate: number,
@@ -75,20 +75,21 @@ export function calcDNA(rate: number, rule: PricingRule): number {
 }
 
 /**
- * Round `value` up to the nearest positive `step`, but if the value's integer
- * part is already at a multiple of `step`, keep it there (don't jump to the
- * next one). This is "floor then ceil":
+ * DNA rounding to the nearest multiple of `step` (always 5 in production):
+ * drop decimals first, then:
+ *   remainder 0, 1, 2 → round DOWN to the lower multiple of 5
+ *   remainder 3, 4    → round UP to the next multiple of 5
  *
- *   2051 → 2055, 2054 → 2055, 2056 → 2060, 2059 → 2060
- *   2050 → 2050 (already at a multiple, stays)
- *   2070.34 → 2070 (integer part 2070 is a multiple of 5, decimals dropped)
- *   2075.01 → 2075 (already at a multiple, stays)
+ *   2070 → 2070, 2071 → 2070, 2072 → 2070
+ *   2073 → 2075, 2074 → 2075, 2075 → 2075
+ *   2070.34 → 2070, 2051 → 2050, 2054 → 2055
  *
- * Matches the DB trigger `ceil(floor(v_dna_price) / 5.0) * 5` exactly.
+ * Matches the DB trigger `floor((floor(v_dna_price) + 2) / 5.0) * 5`.
  */
 export function roundUpToNearest(value: number, step: number): number {
   if (!Number.isFinite(value) || value <= 0 || step <= 0) return 0;
-  return Math.ceil(Math.floor(value) / step) * step;
+  // Equivalent to: rem <= 2 → down, rem >= 3 → up (for step = 5).
+  return Math.floor((Math.floor(value) + Math.floor(step / 2)) / step) * step;
 }
 
 /** Render a sticker price without trailing zeros — e.g. 5326, 4205.5 */
