@@ -14,9 +14,9 @@ describe('pricing regression', () => {
     expect(calcMA(4000, rule)).toBe(5847);
   });
 
-  it('DNA: rate × 1.20 then MU5% (hybrid), round up to 5', () => {
-    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → round up to 5 = 5055
-    expect(calcDNA(4000, rule)).toBe(5055);
+  it('DNA: rate × 1.20 then MU5% (hybrid), rem≤2 down to nearest 5', () => {
+    // 4000 × 1.20 = 4800 → 4800 / 0.95 = 5052.63 → 5052 rem 2 → 5050
+    expect(calcDNA(4000, rule)).toBe(5050);
   });
 
   it('formatLabelPrice keeps integer prices without ".00"', () => {
