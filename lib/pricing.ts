@@ -75,21 +75,23 @@ export function calcDNA(rate: number, rule: PricingRule): number {
 }
 
 /**
- * DNA rounding to the nearest multiple of `step` (always 5 in production):
- * drop decimals first, then:
- *   remainder 0, 1, 2 → round DOWN to the lower multiple of 5
- *   remainder 3, 4    → round UP to the next multiple of 5
+ * DNA rounding to nearest 5 (only DNA uses this; MA is untouched):
+ * drop decimals, then:
+ *   rem 0, 1, 2 → round DOWN  (2070/2071/2072 → 2070)
+ *   rem 3, 4    → round UP    (2073/2074 → 2075)
  *
- *   2070 → 2070, 2071 → 2070, 2072 → 2070
- *   2073 → 2075, 2074 → 2075, 2075 → 2075
- *   2070.34 → 2070, 2051 → 2050, 2054 → 2055
- *
- * Matches the DB trigger `floor((floor(v_dna_price) + 2) / 5.0) * 5`.
+ * Matches DB: floor((floor(v_dna_price) + 2) / 5.0) * 5
  */
 export function roundUpToNearest(value: number, step: number): number {
   if (!Number.isFinite(value) || value <= 0 || step <= 0) return 0;
-  // Equivalent to: rem <= 2 → down, rem >= 3 → up (for step = 5).
-  return Math.floor((Math.floor(value) + Math.floor(step / 2)) / step) * step;
+  const n = Math.floor(value);
+  // DNA always passes step = 5 — keep rem rule explicit.
+  if (step === 5) {
+    const rem = n % 5;
+    if (rem <= 2) return n - rem;
+    return n + (5 - rem);
+  }
+  return Math.floor((n + Math.floor(step / 2)) / step) * step;
 }
 
 /** Render a sticker price without trailing zeros — e.g. 5326, 4205.5 */
