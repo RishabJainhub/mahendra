@@ -19,8 +19,8 @@ type Props = {
 
 /**
  * Shared print modal for a single bill: Argox roll mode (default on), live
- * preview, download, direct print. Status becomes "printed" only after Print
- * or Download PDF — not when opening preview.
+ * preview, download, direct print. Status becomes "printed" after Print,
+ * Download PDF, or Show Preview.
  */
 export function BillPrintModal({ billId, onClose, onMarked }: Props) {
   const { toast } = useToast();

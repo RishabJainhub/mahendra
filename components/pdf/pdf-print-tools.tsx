@@ -105,6 +105,15 @@ export function PdfPrintTools({
     }
   }, [doc, tryAutoMark]);
 
+  const handleTogglePreview = useCallback(async () => {
+    const next = !showPreview;
+    setShowPreview(next);
+    // Shop often prints from the preview pane — mark printed when opening it.
+    if (next) {
+      await tryAutoMark();
+    }
+  }, [showPreview, tryAutoMark]);
+
   const handleManualMark = useCallback(async () => {
     if (!onMarkPrinted || isMarked) return;
     setMarking(true);
@@ -136,7 +145,7 @@ export function PdfPrintTools({
           <FileDown className="mr-1.5 h-4 w-4" />
           {downloading ? 'Preparing PDF…' : 'Download PDF'}
         </Button>
-        <Button type="button" variant="outline" onClick={() => setShowPreview((v) => !v)}>
+        <Button type="button" variant="outline" onClick={() => void handleTogglePreview()}>
           {showPreview ? 'Hide Preview' : 'Show Preview'}
         </Button>
         {onMarkPrinted && (
