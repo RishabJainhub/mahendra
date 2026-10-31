@@ -2,7 +2,7 @@
 # Wipe stale local Supabase migrations and copy the correct ones from this repo.
 # Fixes: ERROR column "tenant_id" does not exist ... idx_audit_log_tenant
 #
-# Usage: ./scripts/fix-db-migrations.sh "/Users/rishabpjain/Downloads/Mahendra project"
+# Usage: ./scripts/fix-db-migrations.sh "/path/to/target/project"
 
 set -euo pipefail
 

@@ -17,7 +17,7 @@ const resolved = path.resolve(input);
 if (!fs.existsSync(resolved)) {
   console.error(`File not found: ${resolved}`);
   console.error('Drop the PDF at tmp/sample.pdf, or pass a path:');
-  console.error('  node scripts/inspect-pdf.mjs ~/Downloads/Sales_1885_26-27.pdf');
+  console.error('  node scripts/inspect-pdf.mjs ./samples/Sales_1885_26-27.pdf');
   process.exit(1);
 }
 

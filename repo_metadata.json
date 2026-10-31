@@ -1,0 +1,22 @@
+{
+  "name": "mahendra",
+  "description": "Enterprise B2B wholesale platform & pricing engine built with Next.js 16, React 19, and Supabase RLS. Features Argox thermal printing and automated dual-pricing math.",
+  "topics": [
+    "nextjs",
+    "supabase",
+    "typescript",
+    "erp",
+    "retail-tech",
+    "thermal-printing",
+    "pricing-engine",
+    "react19",
+    "postgresql",
+    "tally-erp",
+    "supply-chain",
+    "b2b-saas",
+    "barcode-generator"
+  ],
+  "license": "MIT",
+  "default_branch": "main",
+  "homepage": "https://mahendra26.vercel.app"
+}

@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PROJECT_REF="${SUPABASE_PROJECT_REF:-zpdrnblpvuijwghfxmgm}"
+PROJECT_REF="${SUPABASE_PROJECT_REF:-your-project-id}"
 API_URL="https://${PROJECT_REF}.supabase.co"
 DASHBOARD="https://supabase.com/dashboard/project/${PROJECT_REF}/settings/api"
 

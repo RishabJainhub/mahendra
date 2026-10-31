@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { parseTallyPdf } from '../lib/tally/pdf-parser';
 
 (async () => {
-  const file = process.argv[2] ?? '/Users/rishabpjain/Downloads/Mahendra project/Sales_1932_26-27.pdf';
+  const file = process.argv[2] ?? './Sales_1932_26-27.pdf';
   const buf = fs.readFileSync(file);
   const result = await parseTallyPdf(buf);
   console.log('Bill:', result.bill.number, '|', result.bill.date, '|', result.bill.party);

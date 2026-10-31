@@ -7,7 +7,7 @@
 ## 0. Context for any agent picking this up
 
 **Project:** Mahendra Saree House — Tally bill processing + barcode sticker printing for saree suppliers.
-**Root:** `/Users/rishabpjain/Downloads/Mahendra project`
+**Root:** `./mahendra`
 **Goal:** A multi-tenant Next.js app where suppliers import Tally XML/Excel bills, the system applies per-supplier pricing rules, and admins print barcode sticker sheets.
 
 **Verified current state of the repo (do not re-derive):**
@@ -478,6 +478,6 @@ middleware.ts
 
 Hand the full file path to any tool (Cursor, Claude Code, Codex, subagent):
 
-> Read `/Users/rishabpjain/Downloads/Mahendra project/MAHENDRA_BUILD_PLAN.md` end to end. Execute phases 0 through 9 in order. After each phase, run the verify step and STOP if it fails. Do not skip phases. Do not rewrite working files. Follow the rules in section 0.
+> Read `MAHENDRA_BUILD_PLAN.md` end to end. Execute phases 0 through 9 in order. After each phase, run the verify step and STOP if it fails. Do not skip phases. Do not rewrite working files. Follow the rules in section 0.
 
 That's the whole context. Paste the file path, not the contents, and the tool has everything.

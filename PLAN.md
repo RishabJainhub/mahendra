@@ -2,7 +2,7 @@
 
 > Produced by Cursor Cloud planning agent (PART 1). Authoritative spec: `/workspace/MAHENDRA_BUILD_PLAN.md`. Do not deviate from the spec architecture.
 
-**Repo root:** `/workspace` (local dev equivalent: `/Users/rishabpjain/Downloads/Mahendra project`)
+**Repo root:** `/workspace` (local dev equivalent: `~/mahendra`)
 
 ---
 

@@ -17,7 +17,7 @@ cd "$(dirname "$0")/.."
 # Quieter CLI (PostHog timeout warnings are harmless)
 export SUPABASE_TELEMETRY_DISABLED="${SUPABASE_TELEMETRY_DISABLED:-1}"
 
-PROJECT_REF="${SUPABASE_PROJECT_REF:-zpdrnblpvuijwghfxmgm}"
+PROJECT_REF="${SUPABASE_PROJECT_REF:-your-project-id}"
 API_URL="https://${PROJECT_REF}.supabase.co"
 DASHBOARD="https://supabase.com/dashboard/project/${PROJECT_REF}"
 SKIP_LINK="${SKIP_LINK:-0}"

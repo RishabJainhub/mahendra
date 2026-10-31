@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Pull latest branch into ~/mahendra and sync into Downloads folder.
-# Usage: ./scripts/pull-and-sync.sh "/Users/rishabpjain/Downloads/Mahendra project"
+# Pull latest branch into ~/mahendra and sync into target folder.
+# Usage: ./scripts/pull-and-sync.sh "/path/to/target/project"
 #
 # Safe to re-run. Stashes auto-generated local changes that block git pull.
 
 set -euo pipefail
 
-TARGET="${1:-/Users/rishabpjain/Downloads/Mahendra project}"
+TARGET="${1:-/path/to/target/project}"
 BRANCH="${2:-cursor/full-revamp-ui-features-51c0}"
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -30,7 +30,7 @@ git pull origin "$BRANCH"
 
 chmod +x scripts/sync-to-local.sh scripts/check-local.mjs scripts/fix-db-migrations.sh 2>/dev/null || true
 
-echo "==> Syncing to Downloads..."
+echo "==> Syncing to target..."
 "$REPO/scripts/sync-to-local.sh" "$TARGET"
 
 echo "==> Fixing database migrations (removes stale local SQL)..."

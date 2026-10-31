@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Sync latest from GitHub clone into your local Mahendra Distributors folder (Downloads).
-# Usage: ./scripts/sync-to-local.sh "/Users/rishabpjain/Downloads/Mahendra project"
+# Sync latest from GitHub clone into your local Mahendra Distributors folder.
+# Usage: ./scripts/sync-to-local.sh "/path/to/target/project"
 
 set -euo pipefail
 

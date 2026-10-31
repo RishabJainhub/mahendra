@@ -34,18 +34,18 @@ Add these for **Production** (and Preview if you want):
 
 | Variable | Value | Notes |
 |----------|--------|--------|
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://zpdrnblpvuijwghfxmgm.supabase.co` | From Supabase dashboard → API |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://your-project.supabase.co` | From Supabase dashboard → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` | Anon / publishable key |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | **Sensitive** — server only |
 | `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` | Your Vercel URL (no trailing slash) |
 
-Get keys: [Supabase API settings](https://supabase.com/dashboard/project/zpdrnblpvuijwghfxmgm/settings/api)
+Get keys: [Supabase API settings](https://supabase.com/dashboard/project/your-project-id/settings/api)
 
 After first deploy, set `NEXT_PUBLIC_APP_URL` to the real `*.vercel.app` URL and **redeploy** so OG tags and server actions use the correct host.
 
 ## 4. Supabase Auth URLs (required for login)
 
-[Supabase → Authentication → URL Configuration](https://supabase.com/dashboard/project/zpdrnblpvuijwghfxmgm/auth/url-configuration)
+[Supabase → Authentication → URL Configuration](https://supabase.com/dashboard/project/your-project-id/auth/url-configuration)
 
 | Setting | Value |
 |---------|--------|

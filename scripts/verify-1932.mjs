@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const req = createRequire(import.meta.url);
 const pdfParse = req('pdf-parse');
 
-const file = '/Users/rishabpjain/Downloads/Mahendra project/Sales_1932_26-27.pdf';
+const file = process.argv[2] ?? './Sales_1932_26-27.pdf';
 const buf = fs.readFileSync(file);
 const { text } = await pdfParse(buf);
 
