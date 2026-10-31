@@ -27,9 +27,9 @@ Before digital transformation, inventory processing relied on manual data transc
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                               OPERATIONAL IMPACT METRICS                               │
 ├──────────────────────────┬──────────────────────────┬──────────────────────────────────┤
-│ Consignment Intake Time  │  4 hours ➔ <30 seconds   │  99.8% intake cycle acceleration │
+│ Consignment Intake Time  │  4 hours to <30 seconds (4h -> 30s) │  99.8% intake cycle acceleration │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────────────┤
-│ Gross Margin Leakage     │  4%–6% eliminated        │  Automated algorithmic pricing   │
+│ Gross Margin Leakage     │  4% to 6% eliminated (4-6%)         │  Automated algorithmic pricing   │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────────────┤
 │ Label Misprint & Waste   │  12.5% ➔ 0.00%           │  Vector coordinate positioning   │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────────────┤
